@@ -32,6 +32,10 @@
   
   其余步骤不变
 
+  这是挂载kobe地图的结果：
+  <img width="2160" height="1379" alt="image" src="https://github.com/user-attachments/assets/28966b64-f4bf-4630-92c3-f0f8af8c6359" />
+
+
   
 
 
