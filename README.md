@@ -35,6 +35,9 @@
   这是挂载kobe地图的结果：
   <img width="2160" height="1379" alt="image" src="https://github.com/user-attachments/assets/28966b64-f4bf-4630-92c3-f0f8af8c6359" />
 
+  这是对应的服务器的显示情况：<img width="1963" height="1222" alt="image" src="https://github.com/user-attachments/assets/b82766df-0c17-40f3-9a4e-698353f6c213" />
+
+
 
   
 
