@@ -51,7 +51,12 @@
 
 # HGGG电脑上跑的结果
   笨人发现在我的电脑上跑的分数和这两个成绩都不相同，原因未知（可能是我用的Kobe而不是kobe1），请一位小伙伴在自己电脑上跑一下这个代码，看看和我的成绩是不是一样的，谢谢啦
+  kobe:
 <img width="1080" height="690" alt="4e59b2f53877bd2ff3987b56fa7b9ba2" src="https://github.com/user-attachments/assets/da8ca815-83f5-422b-96f3-5c6949e1f062" />
+  berlin:
+  <img width="2160" height="1379" alt="image" src="https://github.com/user-attachments/assets/25cf3af8-4884-4076-a58e-f2a716ef3f13" />
+
+
 
 
 
