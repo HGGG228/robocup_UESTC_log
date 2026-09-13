@@ -8,11 +8,12 @@
   
   /Apollo/code/UESTC2026_final_pro_yy/UESTC2026/src/main/java/sample_team 这个路径可以不用管，是官方提供的相关内容
   
-  /Apollo/code/UESTC2026_final_pro_yy/UESTC2026/src/main/java/UESTC/module/algorithm 这个路劲下为核心的算法（类似于函数包），这个是可以优化的部分
+  /Apollo/code/UESTC2026_final_pro_yy/UESTC2026/src/main/java/UESTC/module/algorithm 这个路径下为核心的算法（类似于函数包），这个是要主要优化的部分
 
   ATTENTION! 
   
-  /Apollo/code/UESTC2026_final_pro_yy/UESTC2026/src/main/java/UESTC/module/complex 这个路径为智能体部分，是要重点优化的部分，里面有五个文件夹，文件夹内的就是不同行为的具体代码，老师们可以丢给ai看看具体每个部分有什么作用，好像一个叫做A*的文件是最重要的，但是由于为了降重改了文件名，可以分别看一下
+  /Apollo/code/UESTC2026_final_pro_yy/UESTC2026/src/main/java/UESTC/module/complex 这个路径为智能体部分，是要重点优化的部分，里面有五个文件夹，只用修改其中的三个文件夹：<img width="937" height="234" alt="image" src="https://github.com/user-attachments/assets/a2919fe5-7958-450e-80bc-9eb9635844ef" />
+文件夹内的就是不同行为的具体代码，老师们可以丢给ai看看具体每个部分有什么作用，好像一个叫做A*的文件是最重要的，但是由于为了降重改了文件名，可以分别看一下
 
 # 接下来具体的跑图方式
 # 在挂载智能体的时候：
