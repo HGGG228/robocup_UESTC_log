@@ -36,6 +36,22 @@
   <img width="2160" height="1379" alt="image" src="https://github.com/user-attachments/assets/28966b64-f4bf-4630-92c3-f0f8af8c6359" />
 
   这是对应的服务器的显示情况：<img width="1963" height="1222" alt="image" src="https://github.com/user-attachments/assets/b82766df-0c17-40f3-9a4e-698353f6c213" />
+  注意这个程序在运行到第200次的时候会自己关闭，所以要蹲点一下
+
+# 地图的补充
+  压缩包中的map是不全的，更全的map我放到库里了，请大家自己下载覆盖之前的压缩包 rcrs-server-master
+
+# 传承中的分数
+  这个截图中的成绩为学长继承给我们的时候跑图所对应的成绩，大家可以为参考，我在之后将再重新跑一遍并将对应的结果更新在这里，请大家自行查看
+
+  这个是改版后的成绩
+<img width="239" height="145" alt="image" src="https://github.com/user-attachments/assets/3dd709da-7695-4d90-acbf-ffdcdaaf5fc7" />
+  这个是原版的成绩
+<img width="237" height="149" alt="image" src="https://github.com/user-attachments/assets/6bd71e70-e113-4ad9-a667-f42096a304a7" />
+
+# HGGG电脑上跑的结果
+  笨人发现在我的电脑上跑的分数和这两个成绩都不相同，原因未知（可能是我用的Kobe而不是kobe1），请一位小伙伴在自己电脑上跑一下这个代码，看看和我的成绩是不是一样的，谢谢啦
+<img width="1080" height="690" alt="4e59b2f53877bd2ff3987b56fa7b9ba2" src="https://github.com/user-attachments/assets/da8ca815-83f5-422b-96f3-5c6949e1f062" />
 
 
 
