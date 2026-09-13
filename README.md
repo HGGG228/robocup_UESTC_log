@@ -45,10 +45,10 @@
 # 传承中的分数
   这个截图中的成绩为学长继承给我们的时候跑图所对应的成绩，大家可以为参考，我在之后将再重新跑一遍并将对应的结果更新在这里，请大家自行查看
 
-  这个是改版后的成绩
+  这个是原版的成绩
 <img width="259" height="160" alt="image" src="https://github.com/user-attachments/assets/ddd02f7c-561c-4035-80d2-03a809f0298e" />
 
-  这个是原版的成绩
+  这个是改版的成绩
 <img width="237" height="149" alt="image" src="https://github.com/user-attachments/assets/6bd71e70-e113-4ad9-a667-f42096a304a7" />
 
 # HGGG电脑上跑的结果
