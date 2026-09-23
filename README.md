@@ -61,7 +61,8 @@
   <img width="2160" height="1379" alt="image" src="https://github.com/user-attachments/assets/25cf3af8-4884-4076-a58e-f2a716ef3f13" />
 
   ny:
-<img width="1001" height="846" alt="image" src="https://github.com/user-attachments/assets/4b703b61-5562-4d56-ab6b-858da02860e0" />
+<img width="1001" height="846" alt="image" src="https://github.com/user-attachments/assets/7704b044-2d2e-49ff-95ae-edc18d5c79a7" />
+
 
 
 
