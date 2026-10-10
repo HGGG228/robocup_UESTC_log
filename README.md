@@ -63,6 +63,10 @@
   ny:
 <img width="1001" height="846" alt="image" src="https://github.com/user-attachments/assets/7704b044-2d2e-49ff-95ae-edc18d5c79a7" />
 
+  joao1:
+  <img width="2160" height="1379" alt="image" src="https://github.com/user-attachments/assets/40db8f90-7e3e-46e0-b1fe-2cb681dc03dc" />
+
+
 
 
 
