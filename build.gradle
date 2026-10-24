@@ -1,0 +1,88 @@
+buildscript {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google/' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter/'}
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:2.2.3'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }        
+}
+
+plugins {
+  id 'java'
+}
+
+defaultTasks 'build'
+
+group = 'com.github.roborescue'
+
+sourceCompatibility = '21'
+targetCompatibility = '21'
+version = '4.0'
+
+allprojects {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google/' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter/'}
+    }
+}
+
+dependencies {
+  implementation fileTree(dir: 'lib', include: '*.jar')
+  implementation 'com.github.roborescue:rcrs-server:master-SNAPSHOT'
+  implementation 'com.github.roborescue:adf-core-java:master-SNAPSHOT'
+  implementation 'log4j:log4j:1.2.17'
+
+  testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+  testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+}
+
+repositories {
+  mavenCentral()
+
+  maven {
+    url = 'https://sourceforge.net/projects/jsi/files/m2_repo'
+  }
+  maven {
+    url = 'https://repo.enonic.com/public/'
+  }
+  maven {
+    url 'https://jitpack.io'
+  }
+}
+
+test {
+  useJUnitPlatform()
+}
+
+javadoc {
+  options {
+    encoding = 'UTF-8'
+    addStringOption('Xdoclint:none', '-quiet')
+  }
+}
+
+clean {
+  doFirst {
+    delete file( new File( rootDir, 'bin' ) )
+    delete file( new File( rootDir, 'build' ) )
+    delete file( new File( rootDir, 'precomp_data' ) )
+    delete file( new File( rootDir, 'test-results' ) )
+  }
+}
+
+[compileJava, compileTestJava].each {
+  it.options.encoding = 'UTF-8'
+  it.options.compilerArgs += [ '-Xlint:unchecked', '-Xlint:deprecation' ]
+}
+
+task launch(type: JavaExec) {
+  classpath = files('lib')
+  classpath += files('.')
+  classpath += sourceSets.main.runtimeClasspath
+  mainClass = 'adf.core.Main'
+  maxHeapSize = '8192m'
+}
