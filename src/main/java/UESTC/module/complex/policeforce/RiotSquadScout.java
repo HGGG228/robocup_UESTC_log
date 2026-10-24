@@ -21,6 +21,8 @@ import UESTC.module.algorithm.SpatialMorphologyCore;
 import java.util.*;
 
 import UESTC.module.util.DebugUtil;
+import adf.core.debug.DefaultLogger;
+import org.apache.log4j.Logger;
 
 /**
  * RiotSquadScout 警察部队战区道路侦察与除障规划雷达。
@@ -33,6 +35,8 @@ import UESTC.module.util.DebugUtil;
  * 3. 动态响应：如果别的警察被埋了，或者某地人群极其拥挤，立刻提高该地的清障优先级！
  */
 public class RiotSquadScout extends RoadDetector {
+
+  private final Logger logger;
 
   /**
    * 最终锁定的除障目标。
@@ -125,6 +129,8 @@ public class RiotSquadScout extends RoadDetector {
       ModuleManager mm, DevelopData dd) {
     super(ai, wi, si, mm, dd);
 
+    this.logger = DefaultLogger.getLogger(agentInfo.me());
+
     this.basicNavigator = mm.getModule("UESTC.PF.RoadDetector.PathPlanning");
     this.registerModule(this.basicNavigator);
 
@@ -155,11 +161,16 @@ public class RiotSquadScout extends RoadDetector {
    */
   @Override
   public RoadDetector calc() {
+    logger.debug("[CalcStart] time=" + agentInfo.getTime()
+        + ", agent=" + agentInfo.getID()
+        + ", pos=" + agentInfo.getPosition()
+        + ", pendingRoads=" + taskPriorityLedger.size());
     this.distressSignalReceiver.calc();
     this.finalTargetArea = null;
     
     // 如果处于比赛初期的指令静默期，则原地待命
     if (this.isUnderIdleDiscipline()) {
+      logger.debug("[TargetSelect] time=" + agentInfo.getTime() + ", reason=idle, target=null");
       return this;
     }
 
@@ -200,6 +211,11 @@ public class RiotSquadScout extends RoadDetector {
         return this.calc();
       }
     }
+
+    logger.debug("[TargetSelect] time=" + agentInfo.getTime()
+        + ", agent=" + agentInfo.getID()
+        + ", candidates=" + validCandidates.size()
+        + ", target=" + finalTargetArea);
     
     return this;
   }
@@ -329,6 +345,12 @@ public class RiotSquadScout extends RoadDetector {
     // 收发电报
     this.receiveRadioMessages(mm);
     this.broadcastEmergencySignals(mm);
+
+    logger.debug("[UpdateSummary] time=" + agentInfo.getTime()
+        + ", agent=" + agentInfo.getID()
+        + ", pos=" + agentInfo.getPosition()
+        + ", sectorRoads=" + myPatrolSector.size()
+        + ", pendingRoads=" + taskPriorityLedger.size());
     
     return this;
   }

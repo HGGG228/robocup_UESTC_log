@@ -17,7 +17,9 @@ import adf.core.agent.module.ModuleManager;
 import adf.core.component.communication.CommunicationMessage;
 import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.complex.HumanDetector;
+import adf.core.debug.DefaultLogger;
 import java.util.*;
+import org.apache.log4j.Logger;
 import rescuecore2.misc.Pair;
 import rescuecore2.misc.geometry.Point2D;
 import rescuecore2.standard.entities.*;
@@ -33,6 +35,8 @@ import rescuecore2.worldmodel.EntityID;
  * 3. 协同挖掘：如果一个人被埋得很深，一辆车挖不出来，系统会呼叫附近防区的多辆车一起挖（上限为 3 辆）。
  */
 public class BrigadeScout extends HumanDetector {
+
+  private final Logger logger;
 
   /**
    * 物理意义：经过雷达扫描和伤情评估后，决定下车去用铁锹挖的那个人。
@@ -119,6 +123,8 @@ public class BrigadeScout extends HumanDetector {
 
     super(ai, wi, si, mm, dd);
 
+    this.logger = DefaultLogger.getLogger(agentInfo.me());
+
     this.sectorDividerRadar = mm.getModule("UESTC.FB.HumanDetector.Clustering");
     this.registerModule(this.sectorDividerRadar);
 
@@ -166,6 +172,11 @@ public class BrigadeScout extends HumanDetector {
 
     // 洗牌任务列表，清理死者或已获救者
     this.purgeInvalidTasks();
+    logger.debug("[UpdateSummary] time=" + agentInfo.getTime()
+        + ", agent=" + agentInfo.getID()
+        + ", pos=" + agentInfo.getPosition()
+        + ", civilianQueue=" + civilianRescueQueue.size()
+        + ", teammateQueue=" + teammateRescueQueue.size());
     return this;
   }
 
@@ -175,6 +186,9 @@ public class BrigadeScout extends HumanDetector {
    */
   @Override
   public HumanDetector calc() {
+    logger.debug("[CalcStart] time=" + agentInfo.getTime()
+        + ", agent=" + agentInfo.getID()
+        + ", pos=" + agentInfo.getPosition());
     // 唤醒求救信号处理器
     this.distressSignalReceiver.calc();
 
@@ -183,7 +197,7 @@ public class BrigadeScout extends HumanDetector {
     // 伤情自检：我被埋了吗？如果我被埋了，直接放弃思考，等待救援
     this.isMyselfNeedingRescue = this.evaluateRescueNecessity(mySelfId);
     if (this.isMyselfNeedingRescue) {
-      return this;
+      return logCalcResult("buried");
     }
     
     // 获取本回合视野内发生了状态变动的实体
@@ -268,7 +282,7 @@ public class BrigadeScout extends HumanDetector {
         EntrappedStateFireTrucks,
         LIGHT_FIRE_BRIGADE_BURIEDNESS_THRESHOLD
     );
-    if (this.finalRescueTarget != null) return this;
+    if (this.finalRescueTarget != null) return logCalcResult("buried-fire-brigade");
 
     // --- 统计滑动窗口 ---
     int visibleFireTrucksCount = 0;
@@ -283,7 +297,7 @@ public class BrigadeScout extends HumanDetector {
     if (civilianDistribution.isEmpty()) {
       this.finalRescueTarget = this.pickBestCivilianTaskFromTelegrams();
       if (this.finalRescueTarget != null) {
-        return this;
+        return logCalcResult("civilian-message");
       }
 
       this.finalRescueTarget = this.pickLateTeammateRescueTarget(
@@ -292,11 +306,11 @@ public class BrigadeScout extends HumanDetector {
           EntrappedStatePolice
       );
       if (this.finalRescueTarget != null) {
-        return this;
+        return logCalcResult("teammate");
       }
 
       this.finalRescueTarget = this.pickBestLateTeammateTaskFromTelegrams();
-      return this;
+      return logCalcResult("teammate-message-or-idle");
     }
 
     // --- 平民挖掘分配逻辑 ---
@@ -319,13 +333,13 @@ public class BrigadeScout extends HumanDetector {
         // 判断这个坑周围站的人是不是已经满了，我还能不能挤进去挖？
         if (this.canIJoinTheDigging(fireTrucksHere, diggerCount, victimId)) {
           this.finalRescueTarget = victimId;
-          return this;
+          return logCalcResult("local-civilian");
         } else {
           // 如果人满了，我挤不进去，就换一个策略
           if (fireTrucksHere == null) {
             if (this.canIJoinTheDigging(fireTruckDistribution.get(myLocationId), visibleFireTrucksCount, victimId)) {
               this.finalRescueTarget = victimId;
-              return this;
+              return logCalcResult("local-civilian");
             }
           } else {
             // 这个人身边人满了，标记为暂不处理
@@ -356,7 +370,7 @@ public class BrigadeScout extends HumanDetector {
           // 救得活，且我能挤进去挖
           if (this.canIJoinTheDigging(trucksAtThatLocation, diggingOrder, victimId)) {
             this.finalRescueTarget = victimId;
-            return this;
+            return logCalcResult("visible-civilian");
           } else {
             this.blacklistedAvoidTargets.add(victimId);
           }
@@ -383,6 +397,14 @@ public class BrigadeScout extends HumanDetector {
     if (this.finalRescueTarget == null) {
       this.finalRescueTarget = this.pickBestLateTeammateTaskFromTelegrams();
     }
+    return logCalcResult("fallback-or-idle");
+  }
+
+  private HumanDetector logCalcResult(String reason) {
+    logger.debug("[TargetSelect] time=" + agentInfo.getTime()
+        + ", agent=" + agentInfo.getID()
+        + ", reason=" + reason
+        + ", target=" + finalRescueTarget);
     return this;
   }
 
