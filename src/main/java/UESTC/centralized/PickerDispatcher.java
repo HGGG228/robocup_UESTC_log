@@ -10,8 +10,11 @@ import rescuecore2.standard.entities.*;
 import static rescuecore2.standard.entities.StandardEntityURN.*;
 import adf.core.agent.module.ModuleManager;
 import adf.core.component.communication.CommunicationMessage;
+import adf.core.debug.DefaultLogger;
+import org.apache.log4j.Logger;
 
 public class PickerDispatcher extends CommandPicker {
+    private final Logger logger;
     // 声明通用中央指令采摘与分发执行器类，继承并实现基底调度组件接口。
 
     // ========================================================================
@@ -78,6 +81,7 @@ public class PickerDispatcher extends CommandPicker {
 
         if (this.taskDistributionMap == null) {
             // 建立首置运行防御屏障，核查上游分配器是否交付了有效合法的调度映射表。
+            logger.debug("[Dispatch] time=" + agentInfo.getTime() + ", allocatorResult=null");
             return this;
             // 遭遇空载配置环境时实行静默休眠退避策略，终止后续无效解析。
         }
@@ -96,9 +100,17 @@ public class PickerDispatcher extends CommandPicker {
             // 调遣内部私有协议编译工厂，将干瘪的人机对应关系加工为具备通讯传导格式的标准数字帧。
 
             this.generatedCommunicationQueue.add(dispatchBundle);
+            logger.debug("[DispatchItem] time=" + agentInfo.getTime()
+                    + ", recipient=" + responderEntity
+                    + ", target=" + assignedTarget);
             // 把校验编录竣工的合法作业信令装填入列，并寄存入待发射网络流通讯队列内存库。
         }
         // 全盘下级特勤干员的任务派发解译轮回清账工作宣告谢幕。
+
+        logger.debug("[DispatchSummary] time=" + agentInfo.getTime()
+                + ", agent=" + agentInfo.getID()
+                + ", center=" + centerFacilityType
+                + ", assignments=" + taskDistributionMap.size());
 
         return this;
         // 算法统筹分析运算妥投竣工，吐出已满载待发指令数据的当前实体控制柄对象。
@@ -124,6 +136,7 @@ public class PickerDispatcher extends CommandPicker {
         // 向上委托基类结构，执行底层通信参数、世界模型以及场景配置环境的预置挂载。
 
         this.centerFacilityType = ai.me().getStandardURN();
+        this.logger = DefaultLogger.getLogger(agentInfo.me());
         // 自当前智能体信息元数据中，提取并固化控制中心设施的标准实体资源名称枚举标识。
     }
     // 实例化总线装填及指挥中心特征锚定车间打卡落锁。
