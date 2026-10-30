@@ -2,6 +2,7 @@ package sample_team.module.complex;
 
 import static rescuecore2.standard.entities.StandardEntityURN.*;
 
+import UESTC.module.util.AgentTelemetry;
 import adf.core.agent.action.ambulance.ActionLoad;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.MessageUtil;
@@ -40,6 +41,14 @@ public class SampleHumanDetector extends HumanDetector {
     private Map<EntityID, Integer> knownCivilians;
 
     private int lastLoggedModeTime = -1;
+    private String decisionSource = "not_calculated";
+    private int candidateCount = -1;
+    private int clusterCandidateCount = -1;
+    private int rejectedInvalidCount = 0;
+    private int rejectedWrongCount = 0;
+    private int rejectedWaitingCount = 0;
+    private int rejectedClusterCount = 0;
+    private int rejectedInfeasibleCount = 0;
 
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                                ModuleManager moduleManager, DevelopData developData) {
@@ -85,6 +94,14 @@ public class SampleHumanDetector extends HumanDetector {
 
     @Override
     public HumanDetector calc() {
+        decisionSource = "no_target";
+        candidateCount = -1;
+        clusterCandidateCount = -1;
+        rejectedInvalidCount = 0;
+        rejectedWrongCount = 0;
+        rejectedWaitingCount = 0;
+        rejectedClusterCount = 0;
+        rejectedInfeasibleCount = 0;
         logger.debug("----- HumanDetector start -----");
         logger.debug("[CalcStart] time=" + agentInfo.getTime()
                 + ", agent=" + agentInfo.getID()
@@ -94,6 +111,7 @@ public class SampleHumanDetector extends HumanDetector {
 
         Human transportHuman = this.agentInfo.someoneOnBoard();
         if (transportHuman != null) {
+            decisionSource = "on_board";
             logger.debug("[Calc] someoneOnBoard: " + describeHuman(transportHuman));
             this.result = transportHuman.getID();
             logSelectedTargetDetail(this.result);
@@ -102,6 +120,7 @@ public class SampleHumanDetector extends HumanDetector {
 
         Human localTarget = findLoadableHumanAtCurrentPosition();
         if (localTarget != null) {
+            decisionSource = "local_load";
             this.result = localTarget.getID();
             logger.debug("[Calc] local load target selected: " + describeHuman(localTarget)
                     + ", score=" + computeRescueScore(localTarget));
@@ -117,6 +136,19 @@ public class SampleHumanDetector extends HumanDetector {
 
     @Override
     public EntityID getTarget() {
+        AgentTelemetry.decision(this.agentInfo, this.worldInfo, "AT.HumanDetector", this.result,
+                "source", decisionSource,
+                "known", knownCivilians.size(),
+                "wrong", wrongCivilians.size(),
+                "candidates", candidateCount,
+                "cluster_candidates", clusterCandidateCount,
+                "cluster_size", getClusterSize(),
+                "cluster_mode", getClusterModeName(),
+                "rejected_invalid", rejectedInvalidCount,
+                "rejected_wrong", rejectedWrongCount,
+                "rejected_waiting", rejectedWaitingCount,
+                "rejected_cluster", rejectedClusterCount,
+                "rejected_infeasible", rejectedInfeasibleCount);
         return this.result;
     }
 
@@ -529,6 +561,8 @@ public class SampleHumanDetector extends HumanDetector {
 
         List<Human> rescueTargets = buildRescueTargets();
         List<Human> rescueTargetsInCluster = filterInCluster(rescueTargets);
+        candidateCount = rescueTargets.size();
+        clusterCandidateCount = rescueTargetsInCluster.size();
 
         logger.debug("[TargetPool] known=" + knownCivilians.size()
                 + ", rescueTargets=" + rescueTargets.size()
@@ -542,6 +576,7 @@ public class SampleHumanDetector extends HumanDetector {
 
         Human primary = selectBestPrimaryTarget(primaryTargets);
         if (primary != null) {
+            decisionSource = rescueTargetsInCluster.isEmpty() ? "primary_all" : "primary_cluster";
             logger.debug("[TargetSelect] primary selected=" + describeHuman(primary)
                     + ", score=" + computeRescueScore(primary)
                     + ", source=" + (rescueTargetsInCluster.isEmpty() ? "ALL" : "CLUSTER"));
@@ -550,6 +585,7 @@ public class SampleHumanDetector extends HumanDetector {
 
         Human urgent = selectBestUrgentTarget(rescueTargets);
         if (urgent != null) {
+            decisionSource = "urgent";
             logger.debug("[TargetSelect] urgent selected=" + describeHuman(urgent)
                     + ", score=" + computeRescueScore(urgent)
                     + ", remainHp=" + estimateRemainHpAfterArrival(urgent));
@@ -633,6 +669,11 @@ public class SampleHumanDetector extends HumanDetector {
                 + ", atCluster=" + atCluster
                 + ", infeasible=" + infeasible);
 
+        rejectedInvalidCount = invalidType + invalidHuman;
+        rejectedWrongCount = wrong;
+        rejectedWaitingCount = atWait;
+        rejectedClusterCount = atCluster;
+        rejectedInfeasibleCount = infeasible;
         return rescueTargets;
     }
 

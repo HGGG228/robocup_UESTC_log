@@ -1,4 +1,4 @@
-package UESTC.module.complex.common; 
+package UESTC.module.complex.common;
 
 
 import rescuecore2.standard.entities.Human;
@@ -13,23 +13,23 @@ public class SurvivalChronicle {
 
   // 观察对象：当前需要进行生命体征评估的目标人类实体
   private Human targetVictim;
-  
+
   // ==================== 生理衰减模型常数矩阵 ====================
   // 物理意义：伤员的流血速率并不是一成不变的，随着时间的推移，由于未得到救治，
   // 伤情会呈现非线性的加速恶化（如感染、休克、挤压综合征引发的急性肾衰竭）。
 
   // 基础环境白噪声常数：即使没有任何外力，躺在废墟里每回合也会自然增加的轻微损伤
   private final double NOISE_FACTOR = 0.1;
-  
+
   // 掩埋伤害（Bury）的二次项（抛物线）加速系数：模拟长时间被重物压迫导致的内出血加速恶化
   private final double BURY_QUADRATIC_COEF = 0.00025;
-  
+
   // 砸伤伤害（Collapse）的二次项加速系数：模拟骨折或钝器创伤带来的并发症加速恶化
   private final double COLLAPSE_QUADRATIC_COEF = 0.00035;
-  
+
   // 掩埋伤害的线性基础增量：每回合固定恶化的基础数值
   private final double BURY_LINEAR_BASE = 0.01;
-  
+
   // 砸伤伤害的线性基础增量：每回合固定恶化的基础数值
   private final double COLLAPSE_LINEAR_BASE = 0.01;
 
@@ -80,7 +80,7 @@ public class SurvivalChronicle {
     // 提取出患者体内的两项核心关键指标：当前血槽存量，以及此刻的伤口流血流速
     int currentHp = victim.getHP();
     int currentDamage = victim.getDamage();
-    
+
     // 委托给纯数字推演中心进行沙盘推演
     return this.calcLifeXpectancy(currentHp, currentDamage);
   }
@@ -93,31 +93,31 @@ public class SurvivalChronicle {
     // 初始化沙盘体征：将整型的外部数据强制转换为双精度浮点数，以应对微小的衰减计算
     double simulatedHealth = initialHp;
     double simulatedBleedingRate = initialDamage;
-    
+
     // 计时器归零：准备记录他在推演中存活的循环次数
     int survivedCycles = 0;
-    
+
     // 开启死神倒计时：只要沙盘里这个人的血量还没见底（还能喘气），就让时间继续往前走
     while (simulatedHealth > 0) {
       // 冻结当前回合初的流血速率，作为计算并发症恶化的基准参数
       final double baselineDamage = simulatedBleedingRate;
-      
+
       // 恶化叠加 1：挤压综合征发作，伤口情况进一步恶化，流血速率增加
       simulatedBleedingRate += this.calcDamageBury(baselineDamage);
-      
+
       // 恶化叠加 2：创伤并发症发作，多器官开始衰竭，流血速率再次增加
       simulatedBleedingRate += this.calcDamageCollapse(baselineDamage);
-      
+
       // 恶化叠加 3：烧伤感染发作（虽然当前系统此值为0，但保留结构以应对未来赛事规则更新）
       simulatedBleedingRate += this.calcDamageFire(baselineDamage);
-      
+
       // 致命一击：在当前回合结束时，将叠加恶化后的总流血量，从患者的生命血槽中扣除
       simulatedHealth -= simulatedBleedingRate;
-      
+
       // 他又艰难地熬过了一个回合，计时器加一
       survivedCycles++;
     }
-    
+
     // 推演结束（此时 simulatedHealth <= 0），返回他总共撑住的回合数
     return survivedCycles;
   }

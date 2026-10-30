@@ -41,13 +41,13 @@ public class HQPathfinder extends Search implements HQPathPublisher {
 
     // 底层路径规划导航仪。负责算出怎么绕过废墟开到目标大楼。
     private PathPlanning routeNavigationRadar;
-    
+
     // 全城网格划区仪。把城市切分成几块，方便消防车分头行动。
     private Clustering zonePartitionRadar;
-    
+
     // 拥堵被困警报雷达。用于侦测自己是不是被平民或者其他车挤在路中间动弹不得了。
     private Clustering EntrappedStateAgentRadar;
-    
+
     // 道路断行警报雷达。用于侦测自己是不是遇到了过不去的断头路。
     private Clustering trafficJamRadar;
 
@@ -60,7 +60,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
 
     // 消防车自身的身份证号。
     private final EntityID mySelfId;
-    
+
     // 战术随机数骰子。在多个目标同样紧急时，用抛硬币决定去哪，增加巡视的随机覆盖率。
     private Random stochasticEngine = new Random();
 
@@ -70,19 +70,19 @@ public class HQPathfinder extends Search implements HQPathPublisher {
 
     // 全城划分出的总网格数量。
     private int totalPatrolZones;
-    
+
     // 当前正在巡视的网格编号。
     private int currentPatrolZoneIndex;
-    
+
     // 待巡视清单（任务队列）。当前网格内还没去巡查过的建筑物名单。
     private List<EntityID> pendingBuildingQueue = new ArrayList<>();
-    
+
     // 战术紧急插队任务表。Key 是未来的某个时间点（比如第50帧），Value 是要求在那个时候立刻去查探的一批楼。
     private Map<Integer, Collection<EntityID>> tacticalOverrideTasks = new HashMap<>();
-    
+
     // 巡逻轨迹防抖黑名单。Key 是解禁时间，Value 是楼的ID。防止反复进出同一栋大楼。
     private Map<Integer, EntityID> recentlyVisitedBlacklist = new HashMap<>();
-    
+
     // 全城暗火体温备忘录。只要瞟到哪栋楼温度大于0就记下来，闲着的时候专门去查这些发烧的楼。
     private Map<EntityID, Integer> buildingThermalMemory = new HashMap<>();
 
@@ -118,14 +118,14 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     public Search preparate() {
         super.preparate();
         if (this.getCountPreparate() > 1) return this;
-        
+
         // 启动区域划分雷达，全城切块
         this.zonePartitionRadar.calc();
         // 记录一下全城被切成了几块
         this.totalPatrolZones = this.zonePartitionRadar.getClusterNumber();
         // 看看我自己这辆车被分到了哪个区
         this.currentPatrolZoneIndex = this.zonePartitionRadar.getClusterIndex(this.mySelfId);
-        
+
         return this;
     }
 
@@ -136,12 +136,12 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     public Search resume(PrecomputeData pd) {
         super.resume(pd);
         if (this.getCountResume() > 1) return this;
-        
+
         // 和首次启动一样，恢复防区记忆
         this.zonePartitionRadar.calc();
         this.totalPatrolZones = this.zonePartitionRadar.getClusterNumber();
         this.currentPatrolZoneIndex = this.zonePartitionRadar.getClusterIndex(this.mySelfId);
-        
+
         return this;
     }
 
@@ -159,7 +159,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     // ========================================================================
 
     // 开局早期高频测温窗口期（前 30 秒）。此时需要对温度高度敏感。
-    private int N_STEPS_SEARCH_FOR_TEMP = 30; 
+    private int N_STEPS_SEARCH_FOR_TEMP = 30;
 
     /**
      * 战地情报与状态更新台。每秒钟接收自己的动作历史、视觉变化，更新备忘录和任务队列。
@@ -169,29 +169,29 @@ public class HQPathfinder extends Search implements HQPathPublisher {
         super.updateInfo(mm);
         // 防重复更新
         if (this.getCountUpdateInfo() > 1) return this;
-        
+
         // 物理禁锢安检：如果我被困住了（挤在人堆里），视野和行动受限，直接放弃情报更新
         int myStuckIndex = this.EntrappedStateAgentRadar.getClusterIndex(this.mySelfId);
         if (myStuckIndex >= 0) return this;
-        
+
         // 请出战地情报官来处理这些杂事
         IntelligenceOfficer officer = new IntelligenceOfficer();
-        
+
         // 第一件事：战术溯源。回想一下我刚才干了啥，需不需要对刚灭火的现场进行重点监控？
         officer.traceLastActionForRecon();
-        
+
         // 第二件事：初期测温战略。在灾害前 30 秒内，全力寻找正在发烧的楼！
         officer.executeEarlyFeverDetection();
-        
+
         // 第三件事：更新个人的巡视队列。划去刚才肉眼看过的楼，加重黑名单记录。
         officer.refreshPatrolMemory();
-        
+
         // 第四件事：如果我自己防区的名单巡视完了，向上面申请下一个网格的防区！
         officer.requestNextPatrolZone();
-        
+
         // 第五件事：将我自己看出来的火场温度，通过无线电报告给队友。
         this.sendSelectedInfo(mm);
-        
+
         return this;
     }
 
@@ -210,16 +210,16 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     public Search calc() {
         // 第一重安检：如果脑子里已经锁定了死目标了，就不瞎想了
         if (this.lockedSearchDestination != null) return this;
-        
+
         // 第二重安检：如果我挤在废墟里动不了，想了也没用
         if (this.EntrappedStateAgentRadar.getClusterIndex(this.mySelfId) >= 0) return this;
 
         // 掏出硬币：扔一个随机数骰子出来备用
         double fortuneDice = this.stochasticEngine.nextDouble();
-        
+
         // 聘请首席战术规划师
         TacticalPlanner planner = new TacticalPlanner();
-        
+
         // --- 战术第一步：处理暗火备忘录（最高优先级） ---
         // 看看有没有那种严重发烧但是还没冒火的危楼？
         EntityID thermalTarget = planner.evaluateThermalTargets(fortuneDice);
@@ -240,7 +240,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
         // --- 战术第三步：兜底的常规网格巡逻（低优先级） ---
         // 大多数时候，老老实实从我网格里的常规队伍中抽签查房
         planner.executeRoutinePatrol();
-        
+
         return this;
     }
 
@@ -249,7 +249,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     // 负责清理 updateInfo() 里的杂乱逻辑
     // ========================================================================
     private class IntelligenceOfficer {
-        
+
         // 灭火复勘插队延迟期。刚灭完火，等 20 秒再回头去查复燃情况。
         private static final int INTERVAL_INTERRUPT_FIRE = 20;
         // 高温发酵延迟期。发现高温异常后，给它 10 秒钟时间发酵再去复查。
@@ -268,24 +268,24 @@ public class HQPathfinder extends Search implements HQPathPublisher {
             int currentTime = agentInfo.getTime();
             // 看看我上一秒刚干了啥？
             Action lastAction = agentInfo.getExecutedAction(currentTime - 1);
-            
+
             // 如果我上一秒刚好滋了水（执行了灭火动作）
             if (lastAction instanceof ActionExtinguish) {
                 ActionExtinguish extinguishAction = (ActionExtinguish) lastAction;
                 // 立刻抽出刚灭火的这栋楼的 ID
                 EntityID extinguishedBuildingId = extinguishAction.getTarget();
-                
+
                 // 触发战术联动：把这栋刚灭火的楼周围 55 米内所有的实体扫出来
                 Collection<EntityID> nearbyEntities = worldInfo.getObjectIDsInRange(extinguishedBuildingId, ADJACENT_RANGE);
-                
+
                 // 提纯一下，把那些废墟、政府大楼剔除掉，只留有效民居
                 Collection<EntityID> validCandidates = extractCandities(nearbyEntities);
-                
+
                 // 把它们统统强行塞进我的日常巡逻队伍里
                 pendingBuildingQueue.addAll(validCandidates);
                 // 手工去重：把队伍重新梳理一遍，防止同一个楼被加了两次
                 pendingBuildingQueue = new ArrayList<>(new LinkedHashSet<>(pendingBuildingQueue));
-                
+
                 // 记在日历本上：20秒后的那一刻，强制从队列里把这些楼拉出来看一眼！
                 addIntoMap(tacticalOverrideTasks, currentTime + INTERVAL_INTERRUPT_FIRE, nearbyEntities);
             }
@@ -297,12 +297,12 @@ public class HQPathfinder extends Search implements HQPathPublisher {
         void executeEarlyFeverDetection() {
             // 只有比赛刚开始的 30 秒需要这么做
             if (agentInfo.getTime() > N_STEPS_SEARCH_FOR_TEMP) return;
-            
+
             // 去找一圈有没有发烧的楼
             Collection<EntityID> feverBuildings = findHigherTemps();
             // 如果真找到了
             if (!feverBuildings.isEmpty()) {
-                
+
                 // 找出这批楼里面，温度烧得最烫的那一栋！
                 EntityID hottestTarget = null;
                 int maxRecordedTemp = -1;
@@ -314,16 +314,16 @@ public class HQPathfinder extends Search implements HQPathPublisher {
                         hottestTarget = candidateId;
                     }
                 }
-                
+
                 if (hottestTarget != null) {
                     // 把最烫的那栋楼周围 55 米圈起来
                     Collection<EntityID> surroundingEntities = worldInfo.getObjectIDsInRange(hottestTarget, ADJACENT_RANGE);
                     Collection<EntityID> validSurroundings = extractCandities(surroundingEntities);
-                    
+
                     // 把这一圈“有潜在危险”的邻居强行拉入巡逻队
                     pendingBuildingQueue.addAll(validSurroundings);
                     pendingBuildingQueue = new ArrayList<>(new LinkedHashSet<>(pendingBuildingQueue));
-                    
+
                     // 登记造册，10秒后统一突击检查这片高危区域！
                     addIntoMap(tacticalOverrideTasks, agentInfo.getTime() + INTERVAL_INTERRUPT_TEMP, surroundingEntities);
                 }
@@ -337,15 +337,15 @@ public class HQPathfinder extends Search implements HQPathPublisher {
             // 获取刚刚发生风吹草动的所有实体
             Set<EntityID> changedEntityIds = worldInfo.getChanged().getChangedEntities();
             Set<EntityID> abnormalFeverList = new HashSet<>();
-            
+
             for (EntityID currentId : changedEntityIds) {
                 StandardEntity baseEntity = worldInfo.getEntity(currentId);
                 // 如果是普通的民房建筑
-                if (baseEntity instanceof Building && !(baseEntity instanceof Refuge) && !(baseEntity instanceof AmbulanceCentre) 
+                if (baseEntity instanceof Building && !(baseEntity instanceof Refuge) && !(baseEntity instanceof AmbulanceCentre)
                     && !(baseEntity instanceof FireStation) && !(baseEntity instanceof PoliceOffice)) {
-                    
+
                     Building civilianBuilding = (Building) baseEntity;
-                    
+
                     // 战术核验：必须是表面还没冒火（Fieryness == 0）
                     boolean isNotOnFire = civilianBuilding.isFierynessDefined() && civilianBuilding.getFieryness() == 0;
                     if (isNotOnFire) {
@@ -367,14 +367,14 @@ public class HQPathfinder extends Search implements HQPathPublisher {
         void refreshPatrolMemory() {
             // 获取这秒钟我肉眼刚看清楚的建筑（过滤后的纯净版）
             Collection<EntityID> currentlyVisibleBuildings = extractCandities(worldInfo.getChanged().getChangedEntities());
-            
+
             // 既然我看过了，就从待巡视的账本里把它划掉
             pendingBuildingQueue.removeAll(currentlyVisibleBuildings);
-            
+
             // 将我目前脚踩着的位置拉入黑名单，并标注 20 秒后才解禁。防止我刚走出去又绕回来。
             int unblockTime = agentInfo.getTime() + IGNORE_TIME;
             recentlyVisitedBlacklist.put(unblockTime, agentInfo.getPosition());
-            
+
             // 边走边记：看见温度大于0的记下来，看见降为0的划掉
             for (EntityID currentId : currentlyVisibleBuildings) {
                 StandardEntity baseEntity = worldInfo.getEntity(currentId);
@@ -394,13 +394,13 @@ public class HQPathfinder extends Search implements HQPathPublisher {
             }
             // 我自己脚底下的位置肯定没烧起来，不用记
             buildingThermalMemory.remove(agentInfo.getPosition());
-            
+
             // 如果底层的导航仪说路被堵死了根本过不去
             if (cannotReach()) {
                 // 直接放弃那个不切实际的遥远目标
                 pendingBuildingQueue.remove(lockedSearchDestination);
             }
-            
+
             // 如果我原定要去的目标，因为种种原因从队列里消失了
             if (!pendingBuildingQueue.contains(lockedSearchDestination)) {
                 // 清空大脑，准备重选！
@@ -425,14 +425,14 @@ public class HQPathfinder extends Search implements HQPathPublisher {
             while (pendingBuildingQueue.isEmpty()) {
                 // 兜底防死循环：如果全城所有的区我都要过了
                 if (refillAttempts > totalPatrolZones) break;
-                
+
                 // 从系统骰子里摇一个新区编号出来
                 currentPatrolZoneIndex = stochasticEngine.nextInt(totalPatrolZones);
                 // 去雷达里把那个新区的建筑全拉出来
                 Collection<EntityID> rawZoneEntities = zonePartitionRadar.getClusterEntityIDs(currentPatrolZoneIndex);
                 // 提纯一下塞进我的日常名单里
                 pendingBuildingQueue = new ArrayList<>(extractCandities(rawZoneEntities));
-                
+
                 refillAttempts++;
             }
         }
@@ -474,7 +474,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
             if (!validThermalTargets.isEmpty()) {
                 // 测出我自己防区正中心的位置
                 final Point2D myZoneCenter = getClusterCenter();
-                
+
                 // 对所有发烧的楼进行终极排序：
                 // 第一标准：谁烧得最烫谁排在前面（温度降序）
                 // 第二标准：如果一样烫，谁离我家网格中心近谁排在前面（距离升序）
@@ -483,7 +483,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
                     public int compare(Map.Entry<EntityID, Integer> entryA, Map.Entry<EntityID, Integer> entryB) {
                         int tempComparison = entryB.getValue().compareTo(entryA.getValue());
                         if (tempComparison != 0) return tempComparison;
-                        
+
                         Pair<Integer, Integer> locA = worldInfo.getLocation(entryA.getKey());
                         Pair<Integer, Integer> locB = worldInfo.getLocation(entryB.getKey());
                         double distanceA = Math.hypot(locA.first() - myZoneCenter.getX(), locA.second() - myZoneCenter.getY());
@@ -491,7 +491,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
                         return Double.compare(distanceA, distanceB);
                     }
                 });
-                
+
                 // 算一下全城暗火的热量总和，用来做轮盘赌的基数分母
                 double totalFeverTemperature = 0.0D;
                 for (Integer tempVal : buildingThermalMemory.values()) {
@@ -518,7 +518,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
             // 找出此时此刻，有哪些紧急任务到了处理时间？
             List<EntityID> intersectingUrgentTasks = new ArrayList<>();
             int currentClock = agentInfo.getTime();
-            
+
             for (Map.Entry<Integer, Collection<EntityID>> overrideRecord : tacticalOverrideTasks.entrySet()) {
                 // 如果这个任务的闹钟时间已经到了，或者已经拖延过了
                 if (overrideRecord.getKey() > currentClock) {
@@ -535,7 +535,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
 
             // 如果真有紧急任务，而且我的运气不错（小于 0.6 的强制发生率）
             if (!intersectingUrgentTasks.isEmpty() && fortuneDice < URGENT_INTERVENTION_PROBABILITY) {
-                out("SEARCH CANDs D: " + intersectingUrgentTasks); 
+                out("SEARCH CANDs D: " + intersectingUrgentTasks);
                 // 盲抓一个去现场看看
                 int randomIndex = stochasticEngine.nextInt(intersectingUrgentTasks.size());
                 lockedSearchDestination = intersectingUrgentTasks.get(randomIndex);
@@ -568,7 +568,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     }
 
     // ========================================================================
-    // 基础功能与辅助探针 
+    // 基础功能与辅助探针
     // ========================================================================
 
     /**
@@ -584,11 +584,11 @@ public class HQPathfinder extends Search implements HQPathPublisher {
                 if (baseEntity instanceof AmbulanceCentre) continue;
                 if (baseEntity instanceof FireStation) continue;
                 if (baseEntity instanceof PoliceOffice) continue;
-                
+
                 Building civilianBuilding = (Building) baseEntity;
                 // 如果已经烧成一地黑灰（BURNT_OUT）了，去了也白去
                 if (civilianBuilding.getFierynessEnum() == BURNT_OUT) continue;
-                
+
                 purifiedList.add(civilianBuilding.getID());
             }
         }
@@ -601,11 +601,11 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     private Point2D getClusterCenter() {
         int myAssignedIndex = this.zonePartitionRadar.getClusterIndex(this.mySelfId);
         Collection<EntityID> zoneEntities = this.zonePartitionRadar.getClusterEntityIDs(myAssignedIndex);
-        
+
         double elementCount = zoneEntities.size();
         double totalXCoordinates = 0.0D;
         double totalYCoordinates = 0.0D;
-        
+
         for (EntityID eId : zoneEntities) {
             Pair<Integer, Integer> loc = this.worldInfo.getLocation(eId);
             totalXCoordinates += (double) loc.first();
@@ -628,7 +628,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
         // 看看我自己是不是被挂在“交通瘫痪”或者“身体被困”的通报里了
         boolean isTrafficFailed = this.trafficJamRadar.getClusterIndex(this.mySelfId) >= 0;
         boolean isPhysicallyStuck = this.EntrappedStateAgentRadar.getClusterIndex(this.mySelfId) >= 0;
-        
+
         return isPhysicallyStuck || isTrafficFailed;
     }
 
@@ -654,7 +654,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     }
 
     // ========================================================================
-    // 发报控制与价值鉴定 
+    // 发报控制与价值鉴定
     // ========================================================================
 
     /**
@@ -668,7 +668,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
         Collection<EntityID> visibleEntities = this.extractCandities(this.worldInfo.getChanged().getChangedEntities());
         // 挑出最值钱的一栋
         EntityID mostValuableBuildingId = this.selectOneToSend(visibleEntities);
-        
+
         if (mostValuableBuildingId != null) {
             Building valuableBld = (Building) this.worldInfo.getEntity(mostValuableBuildingId);
             // 拍下电报，丢进发送队列
@@ -681,11 +681,11 @@ public class HQPathfinder extends Search implements HQPathPublisher {
      */
     private Boolean shouldSend() {
         if (this.agentInfo.getTime() < 1) return false;
-        
+
         // 获取全城的神仙（救护、消防、警察）
         Collection<EntityID> allHeroes = this.worldInfo.getEntityIDsOfType(AMBULANCE_TEAM, FIRE_BRIGADE, POLICE_FORCE);
         StandardEntity myFootprint = this.worldInfo.getPosition(this.mySelfId);
-        
+
         int maximumIdDiscovered = -1;
         // 看看我脚底下站了几个人？
         for (EntityID heroId : allHeroes) {
@@ -707,7 +707,7 @@ public class HQPathfinder extends Search implements HQPathPublisher {
     private EntityID selectOneToSend(Collection<EntityID> purifiedCandidates) {
         EntityID hottestTarget = null;
         int recordHighTemp = -1;
-        
+
         // 挨个摸一摸眼前的房子
         for (EntityID cId : purifiedCandidates) {
             StandardEntity baseEntity = this.worldInfo.getEntity(cId);

@@ -1,5 +1,6 @@
 package UESTC.module.complex.firebrigade;
 
+import UESTC.module.util.AgentTelemetry;
 import adf.core.agent.info.*;
 import adf.core.agent.module.ModuleManager;
 import adf.core.agent.develop.DevelopData;
@@ -37,42 +38,42 @@ public class BrigadeNavigator extends Search {
    * 物理意义：本辆消防车目前负责扫楼的所有建筑 ID 集合。
    */
   private Set<EntityID> currentPatrolZone = new HashSet<>();
-  
+
   /**
    * 建筑物生命潜能探测档案。
    * 物理意义：记录了每栋楼的“生命潜能”。如果我听到 3 个人在喊救命，我就把这 3 个人的 ID 挂在我周围的一圈楼上。
    * 哪栋楼上挂的求救 ID 最多，哪栋楼里埋着人的概率就最大！
    */
   private Map<EntityID, Set<EntityID>> buildingLifePotentials = new HashMap<>();
-  
+
   /**
    * 已查探废墟名册。
    * 物理意义：我已经进去看过的楼，记在黑名单里，不再去浪费时间。
    */
   private Set<EntityID> alreadySearchedBuildings = new HashSet<>();
-  
+
   /**
    * 因断头路而被迫放弃的目标。
    * 物理意义：路被堵死过不去的地方，暂时延后查探。
    */
   private Set<EntityID> delayedUnreachableTargets = new HashSet<>();
-  
+
   /**
    * 跨区调度惩罚系数。
    * 物理意义：由本辖区最远两端的直线距离算出。用于惩罚那些让我跑太远的任务。
    */
   private double zoneDiagonalPenalty = 0.0;
-  
+
   /**
    * 网格划区雷达。
    */
   private Clustering zonePartitionRadar;
-  
+
   /**
    * 道路断行探测器。
    */
   private Clustering unreachablePathRadar;
-  
+
   /**
    * 人群拥堵探测器。
    */
@@ -101,6 +102,13 @@ public class BrigadeNavigator extends Search {
    */
   @Override
   public EntityID getTarget() {
+    AgentTelemetry.decision(this.agentInfo, this.worldInfo, "BrigadeNavigator", this.finalSearchTarget,
+        "patrolZoneSize", this.currentPatrolZone.size(),
+        "searchedCount", this.alreadySearchedBuildings.size(),
+        "unreachableCount", this.delayedUnreachableTargets.size(),
+        "voiceBuildingCount", this.buildingLifePotentials.size(),
+        "targetVoiceCount", this.buildingLifePotentials.getOrDefault(this.finalSearchTarget, Collections.emptySet()).size(),
+        "zonePenalty", this.zoneDiagonalPenalty);
     return this.finalSearchTarget;
   }
 
@@ -120,7 +128,7 @@ public class BrigadeNavigator extends Search {
     Set<EntityID> activeCandidates = new HashSet<>(this.currentPatrolZone);
     // 划掉那些已经看过的地方
     activeCandidates.removeAll(this.alreadySearchedBuildings);
-    
+
     // 如果候选池空了，无事可做
     if (activeCandidates.isEmpty()) {
       this.finalSearchTarget = null;
@@ -166,7 +174,7 @@ public class BrigadeNavigator extends Search {
 
     final EntityID mySelfId = this.agentInfo.getID();
     final int myAssignedZoneIndex = this.zonePartitionRadar.getClusterIndex(mySelfId);
-    
+
     Collection<EntityID> rawZoneEntities = this.zonePartitionRadar.getClusterEntityIDs(myAssignedZoneIndex);
     Collection<EntityID> purifiedBuildings = this.purifyBuildingsOnly(rawZoneEntities);
 
@@ -186,17 +194,17 @@ public class BrigadeNavigator extends Search {
     final int myOriginalZoneIndex = this.zonePartitionRadar.getClusterIndex(mySelfId);
 
     final int oldSize = this.currentPatrolZone.size();
-    
+
     for (int step = 1; step < totalZoneCount; ++step) {
       // 如果加完之后尺寸没变（说明刚才那个网格是空的或者全查过了），继续往下一个网格借活
       if (this.currentPatrolZone.size() > oldSize) {
         break;
       }
-      
+
       int nextZoneIndex = myOriginalZoneIndex + step * totalZoneCount;
       Collection<EntityID> newRawEntities = this.zonePartitionRadar.getClusterEntityIDs(nextZoneIndex);
       Collection<EntityID> newBuildings = this.purifyBuildingsOnly(newRawEntities);
-      
+
       this.currentPatrolZone.addAll(newBuildings);
     }
   }
@@ -247,7 +255,7 @@ public class BrigadeNavigator extends Search {
     // 困境检讨：如果刚才选的地方过不去，且我自己没被埋（确实是路断了），把那个地方拉入延后处理名单
     Human mySelfBody = (Human) this.agentInfo.me();
     boolean amINotBuried = !mySelfBody.isBuriednessDefined() || mySelfBody.getBuriedness() == 0;
-    
+
     if (this.isUnreachable() && amINotBuried) {
       if (this.finalSearchTarget != null) {
         this.delayedUnreachableTargets.add(this.finalSearchTarget);
@@ -256,13 +264,13 @@ public class BrigadeNavigator extends Search {
 
     // 核心情报 1：听觉雷达映射（把声音投射到建筑物上）
     this.mapAcousticSignalsToBuildings();
-    
+
     // 核心情报 2：视觉检阅与档案清洗
     this.logVisuallySearchedBuildings();
     this.ignoreUntaskableBuildings();
     this.ignoreDiscoveredCivilians();
     this.ignoreRescuedCivilian();
-    
+
     // 如果全城都被我看光了，清空档案准备从头再巡逻一遍
     if (this.evaluateIfCityIsFullySearched()) {
       this.alreadySearchedBuildings.clear();
@@ -297,15 +305,15 @@ public class BrigadeNavigator extends Search {
   private Set<EntityID> findBuildingsInAcousticRange() {
     int acousticRadius = this.scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
     EntityID mySelfId = this.agentInfo.getID();
-    
+
     // 底层引擎返回的是实体对象，此处修正为兼容的遍历逻辑
     Collection<StandardEntity> rawEntitiesInRange = this.worldInfo.getObjectsInRange(mySelfId, acousticRadius);
     Set<EntityID> idsInRange = new HashSet<>();
-    
+
     for (StandardEntity entity : rawEntitiesInRange) {
       idsInRange.add(entity.getID());
     }
-    
+
     return this.purifyBuildingsOnly(idsInRange);
   }
 
@@ -383,7 +391,7 @@ public class BrigadeNavigator extends Search {
     if (sightLine.getDirection().getLength() >= maxSightDistance * 0.8) {
       return false;
     }
-    
+
     // 检查视线是否与这栋楼的外墙边框发生碰撞
     for (Edge structuralEdge : targetBuilding.getEdges()) {
       // 只有实心墙（不可穿透）才会挡视线
@@ -405,7 +413,7 @@ public class BrigadeNavigator extends Search {
    */
   private void ignoreUntaskableBuildings() {
     Set<EntityID> changedEntities = this.worldInfo.getChanged().getChangedEntities();
-    
+
     for (EntityID cId : changedEntities) {
       StandardEntity rawEntity = this.worldInfo.getEntity(cId);
       if (rawEntity instanceof Building) {
@@ -492,7 +500,7 @@ public class BrigadeNavigator extends Search {
 
     final boolean isRoadBlocked = this.unreachablePathRadar.getClusterIndex(myId) >= 0;
     final boolean isBodyStuck = this.physicalTrapRadar.getClusterIndex(myId) >= 0;
-    
+
     return isBodyStuck || isRoadBlocked;
   }
 

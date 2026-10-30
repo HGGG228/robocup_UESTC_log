@@ -18,5 +18,5 @@ public interface TaskAllocPublisher {
     public PoliceTargetAllocator calc();
 
     public PoliceTargetAllocator updateInfo(MessageManager messageManager);
-    
+
 }

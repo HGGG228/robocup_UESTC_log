@@ -66,10 +66,10 @@ public class HeuristicSearchBase extends ComputationCore {
         private final EntityID spatialAnchor;
         // 声明绑定该节点具体物理空间位置的不可变实体标识，沉底排版。
 
-        private final double heuristicForecast; 
+        private final double heuristicForecast;
         // 声明用于存放向终点方向预估剩余启发距离的只读变量，沉底排版。
 
-        private final double historicalWeight; 
+        private final double historicalWeight;
         // 声明用于存放从起点累积真实物理移动损耗的只读变量，沉底排版。
     }
     // 封闭内部代价节点类的边界结构。
@@ -98,7 +98,7 @@ public class HeuristicSearchBase extends ComputationCore {
 
         Comparator<HeuristicNode> weightRanker = Comparator.comparingDouble(HeuristicNode::getFvalue);
         // 定义优先比较器，基于节点的综合代价值（F值）进行升序排序。
-        
+
         Queue<HeuristicNode> openDiscoveryQueue = new PriorityQueue<>(weightRanker);
         // 实例化优先队列，作为 A* 算法向外辐射的开放探测边界。
 
@@ -107,10 +107,10 @@ public class HeuristicSearchBase extends ComputationCore {
 
         while (!openDiscoveryQueue.isEmpty() && !exploredNodesMap.containsKey(destinationIdentifier)) {
             // 开启主循环，持续探索直到队列穷尽或成功触达目标节点。
-            
+
             HeuristicNode pivotVertex = openDiscoveryQueue.poll();
             // 从优先队列中弹出当前总体代价最低的节点作为激活态。
-            
+
             EntityID pivotId = pivotVertex.getID();
             // 提取该激活节点对应的物理空间唯一标识符。
 
@@ -135,16 +135,16 @@ public class HeuristicSearchBase extends ComputationCore {
 
         LinkedList<EntityID> resolvedRoute = new LinkedList<>();
         // 准备一个双向链表，专门用于装载最终的回溯路径结果。
-        
+
         HeuristicNode lineageTracer = exploredNodesMap.get(destinationIdentifier);
         // 提取终点节点对象，将其作为路径逆推的回溯游标起点。
 
         while (lineageTracer != null) {
             // 开启回溯循环，直到游标触及没有父节点的起始锚点。
-            
+
             resolvedRoute.addFirst(lineageTracer.getID());
             // 采用头插法，将当前游标代表的实体标识写入路径链表首部。
-            
+
             lineageTracer = exploredNodesMap.get(lineageTracer.getAncestor());
             // 将游标顺着内部记录的血统指针，向上移动到其父节点位置。
         }

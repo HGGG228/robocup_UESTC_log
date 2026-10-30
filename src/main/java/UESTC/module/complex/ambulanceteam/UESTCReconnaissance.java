@@ -1,5 +1,6 @@
-package UESTC.module.complex.ambulanceteam; 
+package UESTC.module.complex.ambulanceteam;
 
+import UESTC.module.util.AgentTelemetry;
 import adf.core.agent.info.*;
 import adf.core.agent.module.ModuleManager;
 import adf.core.agent.develop.DevelopData;
@@ -34,28 +35,30 @@ public class UESTCReconnaissance extends Search {
 
   // 核心决策结果：经过千辛万苦的计算，最终决定要开车前往的那个建筑物的 ID
   private EntityID result;
-  
+  private String decisionSource = "not_calculated";
+  private int candidateCount = 0;
+
   // 责任田（聚类）：系统分配给这辆救护车专属巡逻的建筑物名单集合
   private Set<EntityID> cluster = new HashSet<>();
-  
+
   // 潜在线索库：记录了哪些建筑物里“可能”有人（比如在这个建筑附近曾经听到过求救声 AKSpeak）
   private Map<EntityID, Set<EntityID>> potentials = new HashMap<>();
-  
+
   // 已探索记录本：记录这辆救护车已经亲自开过去看过的建筑物，防止鬼打墙反复巡逻同一个废墟
   private Set<EntityID> reached = new HashSet<>();
-  
+
   // 拖延黑名单：记录那些虽然想去，但是因为路被堵死导致当前无法到达的建筑物 ID
   private Set<EntityID> delayed = new HashSet<>();
-  
+
   // 惩罚权重：针对上面那个“拖延黑名单”，在计算距离得分时给它们加上一个巨大的惩罚值，让救护车暂时放弃它们
   private double penalty = 0.0;
-  
+
   // 友军高危区：存放消防员当前所在的建筑。消防员在灭火，那里大概率有平民，所以是高优先级搜索区
   private Set<EntityID> highPriorityPosition = new HashSet<>();
-  
+
   // 活埋人员名册：记录已经确认被活埋的平民的位置，以及他们的被埋深度（Buriedness）
   private Map<EntityID, Integer> buriedCivilians = new HashMap<>();
-  
+
   // 算法挂件1：通用聚类器，负责切分城市大地图
   private Clustering clusterer;
   // 算法挂件2：失败移动分析器，用于判断某条路是不是绝对走不通
@@ -90,6 +93,17 @@ public class UESTCReconnaissance extends Search {
    */
   @Override
   public EntityID getTarget() {
+    AgentTelemetry.decision(this.agentInfo, this.worldInfo, "AT.Search", this.result,
+        "source", this.decisionSource,
+        "candidates", this.candidateCount,
+        "cluster_size", this.cluster.size(),
+        "reached", this.reached.size(),
+        "delayed", this.delayed.size(),
+        "potential_positions", this.potentials.size(),
+        "high_priority_positions", this.highPriorityPosition.size(),
+        "buried_positions", this.buriedCivilians.size(),
+        "selected_delayed", this.delayed.contains(this.result),
+        "selected_high_priority", this.highPriorityPosition.contains(this.result));
     return this.result; // 直接交出内部计算好的目的地 ID
   }
 
@@ -103,20 +117,22 @@ public class UESTCReconnaissance extends Search {
     if (this.needToExpandCluster()) {
       this.expandCluster();
     }
-    
+
     // 逻辑二：如果全城所有的房子都被我摸过一遍了，那就把记录本清空（相当于失忆），准备开始第二轮大扫荡
     if (this.needToClearReachd()) {
       this.reached.clear();
     }
-    
+
     // 准备候选名单：把责任田里所有的房子抄写一份
     Set<EntityID> candidates = new HashSet<>(this.cluster);
     // 从候选名单里狠狠地划掉那些“我已经去过”的房子，绝不走回头路
     candidates.removeAll(this.reached);
+    this.candidateCount = candidates.size();
 
     // 逻辑三：最高优先级指令！看看雷达里有没有确切报告被活埋的灾民？如果有，直接去救他，不用再漫无目的地巡逻了
     this.result = this.chooseFromBuriedCivilian();
     if (this.result != null) {
+      this.decisionSource = "buried_civilian";
       // 一旦锁定了被活埋的人，直接中止后续的寻常巡逻计算，立刻发车！
       return this;
     }
@@ -125,7 +141,7 @@ public class UESTCReconnaissance extends Search {
     // 获取裁判员（比较器），它知道一套打分规则（听过声音的房子加分，距离远的扣分）
     Comparator<EntityID> rule = this.comparator();
     EntityID bestTarget = null; // 预留一个擂主宝座
-    
+
     // 用最复古、最稳健的 for-each 循环，让候选名单里的房子一个个上台比拼
     for (EntityID currentCandidate : candidates) {
       if (bestTarget == null) {
@@ -139,33 +155,34 @@ public class UESTCReconnaissance extends Search {
         }
       }
     }
-    
+
     // 擂台赛结束，把最终依然稳坐在宝座上的那个建筑物 ID 设为导航终点（如果名单空了则为 null）
     this.result = bestTarget;
-    
+    this.decisionSource = bestTarget == null ? "no_target" : "exploration";
+
     return this; // 返回更新了目标后的自己
   }
 
   /**
    * 划分地盘启动程序：比赛刚开始时，调用此方法为自己圈定一块初始的巡逻责任区。
    */
-  private void initCluster() {  
+  private void initCluster() {
     // 强制聚类算法进行一次全图网格化计算
-    this.clusterer.calc();  
-  
+    this.clusterer.calc();
+
     // 掏出自己的工作证（ID）
-    final EntityID me = this.agentInfo.getID();  
+    final EntityID me = this.agentInfo.getID();
     // 查出自己被分配到了哪个大区的编号
-    final int index = this.clusterer.getClusterIndex(me);  
+    final int index = this.clusterer.getClusterIndex(me);
     // 找系统要一份该大区内所有实体的原始清单
-    final Collection<EntityID> clusterEntityIDs = this.clusterer.getClusterEntityIDs(index);  
-  
+    final Collection<EntityID> clusterEntityIDs = this.clusterer.getClusterEntityIDs(index);
+
     // 使用纯粹的经典对象方法，从一堆花里胡哨的实体（路、人、车、房）中，只把建筑物筛出来
-    Collection<EntityID> buildings = this.gatherBuildings(clusterEntityIDs);  
-    if (!buildings.isEmpty()) {  
+    Collection<EntityID> buildings = this.gatherBuildings(clusterEntityIDs);
+    if (!buildings.isEmpty()) {
         // 统统装进自己的责任田集合中
-        this.cluster.addAll(buildings);  
-    }  
+        this.cluster.addAll(buildings);
+    }
   }
 
   /**
@@ -199,13 +216,13 @@ public class UESTCReconnaissance extends Search {
     for (EntityID bId : this.worldInfo.getEntityIDsOfType(BUILDING)) {
        buildings.add(bId);
     }
-    
+
     // 准备另一个空筐，用来装全城所有的避难所
     Set<EntityID> refuges = new HashSet<>();
     for (EntityID rId : this.worldInfo.getEntityIDsOfType(REFUGE)) {
        refuges.add(rId);
     }
-    
+
     // 集合求差集：把全城建筑清单里的避难所全部剔除。因为避难所是绝对安全的，不需要去巡逻探索
     buildings.removeAll(refuges);
 
@@ -249,32 +266,32 @@ public class UESTCReconnaissance extends Search {
   /**
    * 直接救人短路逻辑：如果情报网里有活埋的平民，优先挑一个离自己最近的去救，直接放弃巡逻瞎逛。
    */
-  private EntityID chooseFromBuriedCivilian() {  
-    EntityID me = this.agentInfo.getID();  
-    EntityID chosenCivilian = null;  
+  private EntityID chooseFromBuriedCivilian() {
+    EntityID me = this.agentInfo.getID();
+    EntityID chosenCivilian = null;
     // 同样准备一个初始为最大值的擂台记分牌
-    double minDistance = Double.MAX_VALUE;  
-  
+    double minDistance = Double.MAX_VALUE;
+
     // 翻开记录着被埋人员的花名册，逐个审视他们的 ID
-    for (EntityID civilian : this.buriedCivilians.keySet()) {  
+    for (EntityID civilian : this.buriedCivilians.keySet()) {
         // 门槛条件1：此人是否还在苦苦等待救援？（如果值为0说明他已经被别人挖出来了，或者已经死了）
-        if (this.buriedCivilians.get(civilian) == 0) {  
+        if (this.buriedCivilians.get(civilian) == 0) {
             // 门槛条件2：他的位置不是消防员正在执行灭火的高危区？（消防员在灭火的地方太烫了，救护车最好别去添乱）
-            if (!this.highPriorityPosition.contains(civilian)) {  
+            if (!this.highPriorityPosition.contains(civilian)) {
                 // 拉起卷尺，量一下我这辆车开到他头顶废墟的绝对几何直线距离
-                double distance = this.worldInfo.getDistance(civilian, me);  
-                  
+                double distance = this.worldInfo.getDistance(civilian, me);
+
                 // 距离越小，分数越高。如果他的距离小于目前的最小记录：
-                if (distance < minDistance) {  
+                if (distance < minDistance) {
                     minDistance = distance; // 刷新最近距离记录
                     chosenCivilian = civilian; // 锁定这名幸运儿作为当前的抢救首选
-                }  
-            }  
-        }  
-    }  
-      
+                }
+            }
+        }
+    }
+
     // 遍历结束后，返回挑出来的那个最近的倒霉蛋；如果全城太平没人被埋，就安分地返回 null。
-    return chosenCivilian;  
+    return chosenCivilian;
   }
 
   /**
@@ -284,7 +301,7 @@ public class UESTCReconnaissance extends Search {
    */
   private Comparator<EntityID> comparator() {
     final EntityID me = this.agentInfo.getID();
-    
+
     return new Comparator<EntityID>() {
       @Override
       public int compare(EntityID id1, EntityID id2) {
@@ -293,17 +310,17 @@ public class UESTCReconnaissance extends Search {
         Set<EntityID> pot2 = potentials.get(id2);
         int size1 = (pot1 == null) ? 0 : pot1.size();
         int size2 = (pot2 == null) ? 0 : pot2.size();
-        
+
         // 如果听到的求救人数不一样，人多的那边直接获胜（返回正数表示 id1 优先）
         if (size1 != size2) {
            return Integer.compare(size1, size2);
         }
-        
+
         // 第二轮比拼：如果求救声音一样多（或者都没有），那就比物理距离和惩罚。
         // 计算选手 1 的路程耗损 = 真实距离 + (如果是被拉黑的拖延建筑，加上巨大惩罚)
         double score1 = worldInfo.getDistance(id1, me) + (delayed.contains(id1) ? penalty : 0.0);
         double score2 = worldInfo.getDistance(id2, me) + (delayed.contains(id2) ? penalty : 0.0);
-        
+
         // 注意逻辑反转：对于距离和惩罚，数值越“小”，说明距离越近、越值得去，反而应该排在“前面”。
         // 所以这里是用 score2 去 compare score1，实现降序（越小越优先）
         return Double.compare(score2, score1);
@@ -356,7 +373,7 @@ public class UESTCReconnaissance extends Search {
    */
   private void updateHighPriorityPosition() {
     this.highPriorityPosition.clear(); // 清空旧情报
-    
+
     // 向系统索要全城消防单位（FIRE_BRIGADE）的名册
     for (EntityID fbId : this.worldInfo.getEntityIDsOfType(FIRE_BRIGADE)) {
        StandardEntity entity = this.worldInfo.getEntity(fbId);
@@ -380,20 +397,20 @@ public class UESTCReconnaissance extends Search {
    * 活埋倒计时更新器：随着时间的推移，被埋的人的生存希望在慢慢流失。
    * 这里彻底消灭了所有的 Stream，改用极其安全的迭代器和临时集合去规避多线程并发修改异常。
    */
-  private void updateBuriedCivilian() {  
+  private void updateBuriedCivilian() {
     // 环节一：时间沙漏。遍历所有记录在案的被埋人员，让他们的生存计时器减 1
     for (Map.Entry<EntityID, Integer> entry : this.buriedCivilians.entrySet()) {
         int oldValue = entry.getValue();
         // 确保计时器最低只到 0，不会出现负数
         entry.setValue(Math.max(oldValue - 1, 0));
     }
-  
+
     // 环节二：睁眼看世界。用古典循环去扫描这一秒钟内所有发生变化的东西
-    WorldInfo info = this.worldInfo;  
-    Collection<EntityID> changedEntityIDs = info.getChanged().getChangedEntities();  
-  
+    WorldInfo info = this.worldInfo;
+    Collection<EntityID> changedEntityIDs = info.getChanged().getChangedEntities();
+
     Set<Civilian> inSightBuriedCivilian = new HashSet<>();
-    
+
     for (EntityID changedId : changedEntityIDs) {
         StandardEntity e = info.getEntity(changedId);
         // 如果眼睛看到的是个人类老百姓
@@ -409,26 +426,26 @@ public class UESTCReconnaissance extends Search {
             }
         }
     }
-  
+
     // 环节三：更新户口本。把刚才亲眼看见的被埋人员情况登记造册
-    for (Civilian civilian : inSightBuriedCivilian) {  
-        EntityID position = civilian.getPosition();  
+    for (Civilian civilian : inSightBuriedCivilian) {
+        EntityID position = civilian.getPosition();
         // 存入或覆盖此建筑物门牌号下对应的埋藏深度
-        this.buriedCivilians.put(position, civilian.getBuriedness());  
+        this.buriedCivilians.put(position, civilian.getBuriedness());
         // 但是且慢，探一探鼻息：如果他的血条已经没了（HP<=0）
-        if (civilian.isHPDefined() && civilian.getHP() <= 0) {  
+        if (civilian.isHPDefined() && civilian.getHP() <= 0) {
             // 节哀顺变，人都没了，赶紧从救援名册里划掉他，别浪费有限的医疗资源
-            this.buriedCivilians.remove(position);  
-        }  
-    }  
-  
+            this.buriedCivilians.remove(position);
+        }
+    }
+
     // 环节四：原地校验。如果我这辆车正停在一个原先标有“这里有被埋者”的地点
-    EntityID nowPosition = this.agentInfo.getPosition();  
+    EntityID nowPosition = this.agentInfo.getPosition();
     // 查证记录本，如果此地的危险警报值已经降到 0（说明人被挖出来了）
-    if (this.buriedCivilians.containsKey(nowPosition) && this.buriedCivilians.get(nowPosition) == 0) {  
+    if (this.buriedCivilians.containsKey(nowPosition) && this.buriedCivilians.get(nowPosition) == 0) {
         // 彻底擦掉这个坐标的危险记录
-        this.buriedCivilians.remove(nowPosition);  
-    }  
+        this.buriedCivilians.remove(nowPosition);
+    }
   }
 
   /**
@@ -462,7 +479,7 @@ public class UESTCReconnaissance extends Search {
 
     final EntityID me = this.agentInfo.getID();
     Set<EntityID> ret = new HashSet<>();
-    
+
     // 修复点 1：底层接口 getObjectsInRange 吐出来的是物理实体 StandardEntity，而不是 EntityID
     for (StandardEntity entity : this.worldInfo.getObjectsInRange(me, range)) {
         // 如果是房子，则收集其 ID
@@ -534,72 +551,72 @@ public class UESTCReconnaissance extends Search {
   /**
    * 硬核数学引擎：向量代数与叉乘检验。判断智能体的中心点，是否真实逼近并跨越了某个建筑多边形的边缘。
    */
-  private boolean isReached(Building building) {  
+  private boolean isReached(Building building) {
     // 获取视线能看清的最大物理距离
-    final int max = this.scenarioInfo.getPerceptionLosMaxDistance();  
+    final int max = this.scenarioInfo.getPerceptionLosMaxDistance();
     // 乘以 0.8 的缩放因子后求平方，作为“判断是否到达”的容差阈值
-    final double maxDistanceSquared = (max * 0.8) * (max * 0.8);  
-    
+    final double maxDistanceSquared = (max * 0.8) * (max * 0.8);
+
     // 提取我这辆救护车当前的地图几何点
-    final Point2D agentPoint = this.getPoint();  
-    final double agentX = agentPoint.getX();  
-    final double agentY = agentPoint.getY();  
-    
+    final Point2D agentPoint = this.getPoint();
+    final double agentX = agentPoint.getX();
+    final double agentY = agentPoint.getY();
+
     // 提取那个建筑物的地图几何中心点
-    final double buildingX = building.getX();  
-    final double buildingY = building.getY();  
-    
+    final double buildingX = building.getX();
+    final double buildingY = building.getY();
+
     // 基础勾股定理运算：求两点间 X、Y 方向的差值
-    final double dx = buildingX - agentX;  
-    final double dy = buildingY - agentY;  
+    final double dx = buildingX - agentX;
+    final double dy = buildingY - agentY;
     // 为了节省开方(Math.sqrt)这极其消耗 CPU 的操作，直接计算距离的平方
-    final double distanceSquared = dx * dx + dy * dy;  
-  
+    final double distanceSquared = dx * dx + dy * dy;
+
     // 初步筛查：如果算出来的直线距离平方，连我们规定的最大视距的平方都够不着，说明离得还十万八千里呢，直接否决
-    if (distanceSquared >= maxDistanceSquared) {  
-        return false;  
-    }  
-  
+    if (distanceSquared >= maxDistanceSquared) {
+        return false;
+    }
+
     // 深度验证：建筑不是一个点，而是一个拥有多条边（Edge）的封闭多边形区域。
     // 必须确认我这辆车是否真的可以或者已经越过了它的“可通行（Passable）”大门。
-    for (Edge edge : building.getEdges()) {  
+    for (Edge edge : building.getEdges()) {
         // 如果这堵墙是死胡同或者实心墙（不可通行），就不用测了
-        if (!edge.isPassable()) {  
-            continue;  
-        }  
-  
+        if (!edge.isPassable()) {
+            continue;
+        }
+
         // 抓取这堵墙的左顶点和右顶点坐标
-        Point2D edgeStart = edge.getStart();  
-        Point2D edgeEnd = edge.getEnd();  
-        final double edgeStartX = edgeStart.getX();  
-        final double edgeStartY = edgeStart.getY();  
-        final double edgeEndX = edgeEnd.getX();  
-        final double edgeEndY = edgeEnd.getY();  
-  
+        Point2D edgeStart = edge.getStart();
+        Point2D edgeEnd = edge.getEnd();
+        final double edgeStartX = edgeStart.getX();
+        final double edgeStartY = edgeStart.getY();
+        final double edgeEndX = edgeEnd.getX();
+        final double edgeEndY = edgeEnd.getY();
+
         // 构建两个重要的向量：
         // 向量 A (ax, ay)：从我这辆车指向墙的左顶点
-        final double ax = edgeStartX - agentX;  
-        final double ay = edgeStartY - agentY;  
+        final double ax = edgeStartX - agentX;
+        final double ay = edgeStartY - agentY;
         // 向量 B (bx, by)：从我这辆车指向墙的右顶点
-        final double bx = edgeEndX - agentX;  
-        final double by = edgeEndY - agentY;  
-  
+        final double bx = edgeEndX - agentX;
+        final double by = edgeEndY - agentY;
+
         // 运用高维向量的叉乘（Cross Product）和点乘（Dot Product）进行线性代数计算
         // 叉乘的本质是在算三角形的面积或者向量共线情况
-        final double cross = ay * bx - ax * by;  
-        final double dot1 = ax * ax + ay * ay;  
-        final double dot2 = bx * bx + by * by;  
+        final double cross = ay * bx - ax * by;
+        final double dot1 = ax * ax + ay * ay;
+        final double dot2 = bx * bx + by * by;
         // 计算投影系数 U 值
-        final double u = cross * cross / (dot1 * dot2);  
-  
+        final double u = cross * cross / (dot1 * dot2);
+
         // 数学定论：如果 U 值坍缩在 [0, 1] 区间内，在几何意义上意味着：
         // 从我这里射向建筑的一根射线，结结实实地切断了建筑物的这条通行大门（有几何交点）！
-        if (u >= 0 && u <= 1) {  
+        if (u >= 0 && u <= 1) {
             return true; // 交集确立，判定为“已经成功到达该建筑”
-        }  
-    }  
-  
-    return false;  
+        }
+    }
+
+    return false;
   }
 
   /**
@@ -694,7 +711,7 @@ public class UESTCReconnaissance extends Search {
     final boolean failed = this.failedMove.getClusterIndex(me) >= 0;
     // 如果“被困判定器”把我拉进了它的名单，说明我陷入废墟泥沼了
     final boolean stucked = this.stuckedHumans.getClusterIndex(me) >= 0;
-    
+
     // 两者有其一，那就是彻底走不动了
     return stucked || failed;
   }
@@ -724,12 +741,12 @@ public class UESTCReconnaissance extends Search {
     final int myClsNum = this.clusterer.getClusterIndex(me);
     // 要一份我大区里所有大楼的详单
     final Collection<EntityID> entities = this.clusterer.getClusterEntityIDs(myClsNum);
-    
+
     // 责任制拦截：如果密电里说的这栋大楼，根本就不在我负责的大区内
     if (!entities.contains(targetID)) {
       return; // 各扫门前雪，我不用去管，自然会有负责那个大区的车去救
     }
-    
+
     // 如果这栋楼正是我的辖区，那就严阵以待。
     // 把该难民所在的楼栋，以及他惨烈的被埋深度（发信时可能有延迟，先预扣去 1 个深度值），郑重地记录进我的活埋名册中！
     this.buriedCivilians.put(targetID, msg.getBuriedness() - 1);

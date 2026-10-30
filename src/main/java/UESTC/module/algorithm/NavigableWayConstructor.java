@@ -1,5 +1,6 @@
 package UESTC.module.algorithm;
 
+import UESTC.module.util.AgentTelemetry;
 import adf.core.component.module.algorithm.*;
 import adf.core.agent.info.*;
 import adf.core.agent.module.ModuleManager;
@@ -195,11 +196,14 @@ public class NavigableWayConstructor extends PathPlanning {
    */
   @Override
   public PathPlanning calc() {
+    long started = System.nanoTime();
     // 清空旧结果
     this.result = null;
 
     // 执行 A* 搜索
     this.result = HeuristicSearchBase.find(new SearchNode(this.from), this.destination);
+    AgentTelemetry.path(this.agentInfo, this.worldInfo, "NavigableWayConstructor",
+        this.from, this.destination, this.result, System.nanoTime() - started);
 
     // 返回当前对象
     return this;
