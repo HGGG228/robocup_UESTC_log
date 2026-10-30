@@ -1,5 +1,6 @@
 package UESTC.module.algorithm;
 
+import UESTC.module.util.AgentTelemetry;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -96,10 +97,14 @@ public class OptimalTrajectorySolver extends PathPlanning {
 
     @Override
     public PathPlanning calc() {
+        long started = System.nanoTime();
         // 覆写继承架构下的路径规划核心演算中枢启动调度方法。
-        this.computedPathSequence = null; 
+        this.computedPathSequence = null;
         // 启动新一轮寻路推演前，执行内存保护以清空遗留的路径轨迹缓存。
         this.computedPathSequence = HeuristicSearchBase.find(new Node(this.originNodeIdentifier), this.targetNodeIdentifier);
+        AgentTelemetry.path(this.agentInfo, this.worldInfo, "OptimalTrajectorySolver",
+                this.originNodeIdentifier, this.targetNodeIdentifier, this.computedPathSequence,
+                System.nanoTime() - started);
         // 实例化起始评估节点并移交 A* 核心引擎求解，持久化保存返回的最优路线序列。
         return this;
         // 寻路演算任务执行完毕，返回当前类实例引用以支持级联调用。
@@ -157,7 +162,7 @@ public class OptimalTrajectorySolver extends PathPlanning {
 
         this.targetNodeIdentifier = potentialTargets.stream()
                 // 解构宏观候选目标集合并开启数据流管道，准备接驳后续优选排查作业链。
-                .min(Comparator.comparingDouble(candidateId -> 
+                .min(Comparator.comparingDouble(candidateId ->
                         // 引入数值比较器机制，制定依赖欧氏空间绝对距离最短原则的升序评价策略。
                         this.worldInfo.getDistance(candidateId, selfEntityId)))
                         // 调用世界模型测距算子开展距离度量，定位物理空间中最贴合自身基点的目标。
@@ -178,10 +183,10 @@ public class OptimalTrajectorySolver extends PathPlanning {
 
     private List<EntityID> computedPathSequence;
     // 声明私有列表变量，用以缓冲存储经由启发式搜索推演验证生成的最优行进轨迹链。
-    
+
     private EntityID originNodeIdentifier;
     // 声明私有标识位字段，用于记忆固化每一次分配导航任务指令时的初始源端标记。
-    
+
     private EntityID targetNodeIdentifier;
     // 声明私有标识位字段，用以锁定历经就近排位甄选确立的终极寻优脱困目标端点。
 

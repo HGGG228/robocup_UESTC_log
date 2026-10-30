@@ -1,88 +1,58 @@
-buildscript {
-    repositories {
-        maven { url 'https://maven.aliyun.com/repository/google/' }
-        maven { url 'https://maven.aliyun.com/repository/jcenter/'}
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:2.2.3'
-
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
-    }        
-}
-
 plugins {
-  id 'java'
+    id 'java'
 }
 
 defaultTasks 'build'
-
 group = 'com.github.roborescue'
-
-sourceCompatibility = '21'
-targetCompatibility = '21'
 version = '4.0'
 
-allprojects {
-    repositories {
-        maven { url 'https://maven.aliyun.com/repository/google/' }
-        maven { url 'https://maven.aliyun.com/repository/jcenter/'}
-    }
-}
-
-dependencies {
-  implementation fileTree(dir: 'lib', include: '*.jar')
-  implementation 'com.github.roborescue:rcrs-server:master-SNAPSHOT'
-  implementation 'com.github.roborescue:adf-core-java:master-SNAPSHOT'
-  implementation 'log4j:log4j:1.2.17'
-
-  testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
-  testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 repositories {
-  mavenCentral()
-
-  maven {
-    url = 'https://sourceforge.net/projects/jsi/files/m2_repo'
-  }
-  maven {
-    url = 'https://repo.enonic.com/public/'
-  }
-  maven {
-    url 'https://jitpack.io'
-  }
+    mavenCentral()
+    maven { url = uri('https://jitpack.io') }
+    maven { url = uri('https://repo.enonic.com/public/') }
+    maven { url = uri('https://sourceforge.net/projects/jsi/files/m2_repo') }
 }
 
-test {
-  useJUnitPlatform()
+dependencies {
+    implementation fileTree(dir: 'lib', include: '*.jar')
+    implementation 'com.github.roborescue:rcrs-server:master-SNAPSHOT'
+    implementation 'com.github.roborescue:adf-core-java:master-SNAPSHOT'
+    implementation 'log4j:log4j:1.2.17'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.8.1'
 }
 
-javadoc {
-  options {
-    encoding = 'UTF-8'
-    addStringOption('Xdoclint:none', '-quiet')
-  }
+tasks.named('test', Test) {
+    useJUnitPlatform()
 }
 
-clean {
-  doFirst {
-    delete file( new File( rootDir, 'bin' ) )
-    delete file( new File( rootDir, 'build' ) )
-    delete file( new File( rootDir, 'precomp_data' ) )
-    delete file( new File( rootDir, 'test-results' ) )
-  }
+tasks.named('javadoc', Javadoc) {
+    options.encoding = 'UTF-8'
+    options.addStringOption('Xdoclint:none', '-quiet')
 }
 
-[compileJava, compileTestJava].each {
-  it.options.encoding = 'UTF-8'
-  it.options.compilerArgs += [ '-Xlint:unchecked', '-Xlint:deprecation' ]
+tasks.named('clean', Delete) {
+    delete layout.projectDirectory.dir('bin')
+    delete layout.projectDirectory.dir('precomp_data')
+    delete layout.projectDirectory.dir('test-results')
 }
 
-task launch(type: JavaExec) {
-  classpath = files('lib')
-  classpath += files('.')
-  classpath += sourceSets.main.runtimeClasspath
-  mainClass = 'adf.core.Main'
-  maxHeapSize = '8192m'
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.addAll(['-Xlint:unchecked', '-Xlint:deprecation'])
 }
+
+tasks.register('launch', JavaExec) {
+    classpath = files('lib', '.') + sourceSets.main.runtimeClasspath
+    mainClass = 'adf.core.Main'
+    maxHeapSize = '8192m'
+}
+
+apply from: 'gradle/map-logs.gradle'

@@ -25,7 +25,7 @@ public class WorldInfo {
 
     /** 智能体自身的局部状态档案 */
     private final AgentInfo localAgentProfile;
-    
+
     /** 底层全局地图数据存储库 */
     private final adf.core.agent.info.WorldInfo globalMapRepository;
 
@@ -35,7 +35,7 @@ public class WorldInfo {
 
     /** 查询容量限制（目前处于预留状态，待后续扩展） */
     private int capacityLimit;
-    
+
     /** 目标实体的统一资源名称 (URN) 分类 */
     private StandardEntityURN searchCriteriaURN;
 
@@ -125,7 +125,7 @@ public class WorldInfo {
 
             // 获取当前轮回中所有状态发生了改变的实体集合
             Set<EntityID> dynamicEntitiesInCurrentCycle = globalMapRepository.getChanged().getChangedEntities();
-            
+
             // 获取指定 URN 类型的所有实体（注意：此处安全地使用 Collection 接收，避免强转 Set 异常）
             Collection<EntityID> entitiesMatchingURN = globalMapRepository.getEntityIDsOfType(searchCriteriaURN);
 

@@ -48,34 +48,34 @@ public class UESTCDataTransceiver implements CommunicationAdapter<EntityID> {
   public void execute(Map<EntityID, Factor<EntityID>> nodes) {
     // 采用最经典稳健的游标迭代器，准备从头到尾扫视基站暂存池中的每一封待发电报
     Iterator<SignalPayload> packetIterator = this.telegramCache.iterator();
-    
+
     // 只要暂存池的游标前方还有未处理的电报，就持续推动审查和派发齿轮
     while (packetIterator.hasNext()) {
       // 移动游标，提取出当前正在被基站审查的这一个信号数据包
       SignalPayload currentPacket = packetIterator.next();
-      
+
       // 从当前信号数据包中，提取出信封上写明的目标收件人身份证号
       EntityID destinationId = currentPacket.recipientId;
-      
+
       // 第一重安检：翻阅全网存活节点花名册，核实这个收件人此时此刻是否还在网络中存活（字典中包含该 Key）
       boolean isDestinationAlive = nodes.containsKey(destinationId);
-      
+
       // 判断收件人是否确实存活（没有掉线或被物理摧毁）
       if (isDestinationAlive) {
         // 如果存活，则从全网映射表中，提取出这个收件人对应的真实物理通信终端对象（Factor 因子）
         Factor<EntityID> targetNode = nodes.get(destinationId);
-        
+
         // 严谨的防空指针探针：确保从字典中提取出的通信终端确有其物，并非空引用
         if (targetNode != null) {
           // 从收件人的物理终端中，调取它目前能够建立物理连接的合法邻居白名单集合
           Collection<EntityID> legalNeighbors = targetNode.getNeighbors();
-          
+
           // 从当前信号数据包中，提取出这封电报的发件人身份证号
           EntityID sourceId = currentPacket.senderId;
-          
+
           // 第二重安检（最严苛的物理隔离）：核实发件人的 ID 是否存在于收件人的合法物理邻居白名单内
           boolean isLegitimateConnection = legalNeighbors.contains(sourceId);
-          
+
           // 判断发件人是否确实验证为收件人的合法邻居（防止距离过远的非法作弊通信或串线）
           if (isLegitimateConnection) {
             // 盖下放行戳，强行唤醒收件人终端的底层 receive 接收函数，将核心数学偏好值精准注入其大脑
@@ -83,11 +83,11 @@ public class UESTCDataTransceiver implements CommunicationAdapter<EntityID> {
           }
         }
       }
-      
+
       // 无论当前电报是被合法送达还是被当作死信拦截，处理完毕后都立刻通过游标将其从暂存池中安全销毁
       packetIterator.remove();
     }
-    
+
     // 双保险清空机制：在结束了所有的迭代派发后，强制清空底层的缓存池集合，彻底防止内存泄漏和残留幽灵电报
     this.telegramCache.clear();
   }

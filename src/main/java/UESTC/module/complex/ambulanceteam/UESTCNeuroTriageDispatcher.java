@@ -1,19 +1,19 @@
-package UESTC.module.complex.ambulanceteam; 
+package UESTC.module.complex.ambulanceteam;
 
-import java.util.*; 
+import java.util.*;
 
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.information.MessageAmbulanceTeam;
-import adf.core.component.communication.CommunicationMessage; 
-import adf.core.agent.develop.DevelopData; 
-import adf.core.agent.info.AgentInfo; 
-import adf.core.agent.info.ScenarioInfo; 
-import adf.core.agent.info.WorldInfo; 
-import adf.core.agent.module.ModuleManager; 
-import adf.core.agent.precompute.PrecomputeData; 
-import adf.core.component.module.complex.AmbulanceTargetAllocator; 
-import rescuecore2.standard.entities.*; 
-import rescuecore2.worldmodel.EntityID; 
+import adf.core.component.communication.CommunicationMessage;
+import adf.core.agent.develop.DevelopData;
+import adf.core.agent.info.AgentInfo;
+import adf.core.agent.info.ScenarioInfo;
+import adf.core.agent.info.WorldInfo;
+import adf.core.agent.module.ModuleManager;
+import adf.core.agent.precompute.PrecomputeData;
+import adf.core.component.module.complex.AmbulanceTargetAllocator;
+import rescuecore2.standard.entities.*;
+import rescuecore2.worldmodel.EntityID;
 
 /**
  * UESTCNeuroTriageDispatcher 神经突触伤员分流调度枢纽。
@@ -63,13 +63,13 @@ public class UESTCNeuroTriageDispatcher extends AmbulanceTargetAllocator {
     Collection<EntityID> bunkerCollection = this.worldInfo.getEntityIDsOfType(StandardEntityURN.REFUGE);
     // 实例化高吞吐量缓冲列队，准备对废墟掩体进行二次降维排序
     List<EntityID> bunkerList = new ArrayList<>(bunkerCollection);
-    
+
     // 调用底层比较算子，依据建筑物防爆等级的物理 ID 进行残酷的末日生存权优选排列
     Collections.sort(bunkerList, new Comparator<EntityID>() {
       @Override
       public int compare(EntityID idAlpha, EntityID idBeta) {
         // 剥离外层包装，将建筑实体直接降维打击为纯数字的绝对力量对抗
-        return Integer.compare(idBeta.getValue(), idAlpha.getValue()); 
+        return Integer.compare(idBeta.getValue(), idAlpha.getValue());
       }
     });
 
@@ -104,17 +104,17 @@ public class UESTCNeuroTriageDispatcher extends AmbulanceTargetAllocator {
     List<CommunicationMessage> classifiedComms = mm.getReceivedMessageList(MessageAmbulanceTeam.class);
     // 挂载数据游标探针，准备对捕获的包裹执行逐字节的解剖与剥离
     Iterator<CommunicationMessage> probe = classifiedComms.iterator();
-    
+
     // 当雷达网内仍有未被读取的战区暗号时，维持供电运转
     while (probe.hasNext()) {
       CommunicationMessage rawPayload = probe.next(); // 探针突进，撕扯出当前的战地原始包裹
       MessageAmbulanceTeam tacticalData = (MessageAmbulanceTeam) rawPayload; // 强制上转换，剥离出装甲救护队专有协议头
-      
+
       // 触发杀手锏：排查该指令是否为传说中的极端过载协议（指令 13）
       if (tacticalData.getAction() == DIRECTIVE_CRITICAL_OVERRIDE) {
         EntityID callerId = tacticalData.getAgentID(); // 破译终端物理地址，锁定发报者的真实肉身
         EntityID lockedTargetId = tacticalData.getTargetID(); // 提取该名死士试图强行介入的最终坐标点
-        
+
         // 利用生物雷达波，测算该发报者当前的生理机能余量是否仍具备战术价值
         double bioResonance = calculateBiologicalResonance(callerId, lockedTargetId);
 
@@ -136,11 +136,11 @@ public class UESTCNeuroTriageDispatcher extends AmbulanceTargetAllocator {
 
     // 调配激光测距模块，在当前坐标与目标标靶之间拉扯出一条欧氏距离几何线
     double spatialGap = this.worldInfo.getDistance(agentId, targetId);
-    
+
     // 施加引力衰减算法：物理距离越深，神经元链接的信号损耗就越加剧烈（防止除零崩溃）
     double signalAttenuation = (spatialGap <= 0) ? 1.0 : (1000.0 / spatialGap);
-    
+
     // 注入系统的伪随机突变因子（模拟战场电磁噪音），最后输出经过衰减运算的生化强度残值
-    return signalAttenuation * 0.85; 
+    return signalAttenuation * 0.85;
   }
 }

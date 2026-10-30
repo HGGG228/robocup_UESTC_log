@@ -39,25 +39,25 @@ public class CasualtyProfile extends AbstractModule {
    * 物理意义：如果警察自己都被倒塌的建筑压住了，就无心管别人了。
    */
   private boolean isMyselfEntrappedState = false;
-  
+
   /**
    * 待挖掘平民名册。
    * 物理意义：被埋在废墟里，亟需消防队过来挖的平民。
    */
   private Set<EntityID> buriedCivilianLedger = new HashSet<>();
-  
+
   /**
    * 待挖掘战友名册。
    * 物理意义：被埋的同行（消防、警察、救护）。战友获救能极大提升团队战斗力，优先级极高。
    */
   private Set<EntityID> buriedTeammateLedger = new HashSet<>();
-  
+
   /**
    * 待装载平民名册。
    * 物理意义：没被埋但受了伤、流血不止的平民，需要呼叫救护车来接。
    */
   private Set<EntityID> bleedingCivilianLedger = new HashSet<>();
-  
+
   /**
    * 已通报电台的平民名单。
    * 物理意义：为了防止重复刷屏发报，记录那些我已经向指挥部报告过的平民。
@@ -97,7 +97,7 @@ public class CasualtyProfile extends AbstractModule {
   @Override
   public AbstractModule calc() {
     final EntityID mySelfId = this.agentInfo.getID();
-    
+
     // 伤情自检：如果我被埋了，直接罢工
     this.isMyselfEntrappedState = this.evaluateIfNeedsDigging(mySelfId);
     if (this.isMyselfEntrappedState) {
@@ -106,7 +106,7 @@ public class CasualtyProfile extends AbstractModule {
 
     Set<EntityID> visuallyChangedEntities = this.worldInfo.getChanged().getChangedEntities();
     visuallyChangedEntities.add(mySelfId);
-    
+
     // 建立临时分类档案柜，用于记录各个兵种的位置
     Map<EntityID, Set<EntityID>> civLocationMap = new HashMap<>();
     Map<EntityID, Set<EntityID>> ambLocationMap = new HashMap<>();
@@ -119,20 +119,20 @@ public class CasualtyProfile extends AbstractModule {
       if (!(rawEntity instanceof Human)) {
         continue;
       }
-      
+
       StandardEntity safeHouseLocation = this.worldInfo.getPosition(currentId);
       // 安全屋豁免：已经在避难所里的绝对安全
       if (safeHouseLocation.getStandardURN().equals(REFUGE)) {
         continue;
       }
-      
+
       // 检伤分类
       boolean requiresDigging = this.evaluateIfNeedsDigging(currentId);
       boolean requiresLoading = this.evaluateIfNeedsLoading(currentId);
-      
+
       StandardEntityURN entityProfession = rawEntity.getStandardURN();
       EntityID physicalLocationId = safeHouseLocation.getID();
-      
+
       // 按照兵种，将其分拨到不同的档案柜
       if (entityProfession.equals(AMBULANCE_TEAM)) {
         if (requiresDigging) {
@@ -209,11 +209,11 @@ public class CasualtyProfile extends AbstractModule {
   private boolean isSalvable(EntityID victimId, int assignedWorkforce) {
     final StandardEntity rawEntity = this.worldInfo.getEntity(victimId);
     Human humanBody = (Human) rawEntity;
-    
+
     if (humanBody.getBuriedness() == 0 || humanBody.getHP() == 0 || humanBody.getDamage() == 0) {
       return false;
     }
-    
+
     final SurvivalChronicle medicalAnalyzer = new SurvivalChronicle(humanBody);
     final int estimatedSurvivalChronicle = medicalAnalyzer.getLifeXpectancy();
     return (estimatedSurvivalChronicle - this.calculateDiggingTime(victimId, assignedWorkforce) > 0);
@@ -257,16 +257,16 @@ public class CasualtyProfile extends AbstractModule {
     ObjectScreener visualFilter = new ObjectScreener(this.worldInfo, this.agentInfo);
     // 探明我附近有没有别的闲散消防兄弟
     final EntityID nearbyFireTruckId = visualFilter.getNearyFB();
-    
+
     // 场景 1：旁边有消防车，且我有战友被埋名单！
     if (nearbyFireTruckId != null && !this.buriedTeammateLedger.isEmpty()) {
       Iterator<EntityID> iterator = this.buriedTeammateLedger.iterator();
       EntityID EntrappedStateVictimId = iterator.next();
       StandardEntity victimEntity = this.worldInfo.getEntity(EntrappedStateVictimId);
-      
+
       // 无线电静默策略：利用 ID 和时间的模运算来降低全网电波拥堵
       boolean shouldTransmitRadio = (this.agentInfo.getID().getValue() % 10) == (this.agentInfo.getTime() % 10);
-      
+
       // 根据倒霉蛋的兵种，生成强制移动指令发给那辆消防车
       if (victimEntity instanceof AmbulanceTeam) {
         mm.addMessage(new MessageAmbulanceTeam(VOICE_CHANNEL, (AmbulanceTeam) victimEntity, CommandAmbulance.ACTION_MOVE, EntrappedStateVictimId));
@@ -284,7 +284,7 @@ public class CasualtyProfile extends AbstractModule {
           mm.addMessage(new MessagePoliceForce(VOICE_CHANNEL, (PoliceForce) victimEntity, CommandPolice.ACTION_MOVE, EntrappedStateVictimId));
         }
       }
-      
+
       // 呼叫完了，就从我自己的呼叫队列里划掉
       iterator.remove();
       return; // 一次只发一条，防止刷屏
@@ -294,20 +294,20 @@ public class CasualtyProfile extends AbstractModule {
     Set<EntityID> unsentCivilianTargets = new HashSet<>(this.buriedCivilianLedger);
     // 从我的平民名单中，剥离掉那些我已经广播过的人
     unsentCivilianTargets.removeAll(this.voiceBroadcastedCivilians);
-    
+
     // 如果所有的平民我都喊过了，但是名单里还有人没被挖走，那就循环往复再喊一遍
     if (unsentCivilianTargets.isEmpty()) {
       unsentCivilianTargets = new HashSet<>(this.voiceBroadcastedCivilians);
     }
-    
+
     if (unsentCivilianTargets.isEmpty()) {
       return; // 太平无事
     }
-    
+
     // 扯开嗓门喊，让周围的人都听到这个平民的存在
     final Civilian targetedCiv = (Civilian) this.worldInfo.getEntity(unsentCivilianTargets.iterator().next());
     mm.addMessage(new MessageCivilian(VOICE_CHANNEL, targetedCiv));
-    
+
     // 记在小本本上，这人我喊过了
     this.voiceBroadcastedCivilians.add(targetedCiv.getID());
   }
@@ -323,21 +323,21 @@ public class CasualtyProfile extends AbstractModule {
         iterator.remove();
       }
     }
-    
+
     iterator = this.buriedTeammateLedger.iterator();
     while (iterator.hasNext()) {
       if (!this.evaluateIfNeedsDigging(iterator.next())) {
         iterator.remove();
       }
     }
-    
+
     iterator = this.bleedingCivilianLedger.iterator();
     while (iterator.hasNext()) {
       if (!this.evaluateIfNeedsLoading(iterator.next())) {
         iterator.remove();
       }
     }
-    
+
     iterator = this.voiceBroadcastedCivilians.iterator();
     while (iterator.hasNext()) {
       if (!this.evaluateIfNeedsDigging(iterator.next())) {

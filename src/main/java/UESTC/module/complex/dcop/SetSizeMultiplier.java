@@ -111,7 +111,7 @@ public class ChoiceHeuristic<T> extends SelectorFactor<T> {
     if (isExtremeValue == false) {
         return false;
     }
-    
+
     // 检查发送方是否在我们的物理通信拓扑白名单内
     boolean isDirectNeighbor = this.getNeighbors().contains(msgSender);
     if (isDirectNeighbor) {
@@ -146,7 +146,7 @@ public class ChoiceHeuristic<T> extends SelectorFactor<T> {
     final double lowestUtilityLimit = this.getMaxOperator().getWorstValue();
     // 判定逻辑：如果邻居发来的无穷大不等于我们定义的最差极限，说明该邻居处于“绝对强制激活”状态
     boolean isDecisionActive = (lowestUtilityLimit != infMsg);
-    
+
     // 启动网络拓扑图的裁剪手术
     this.reduce(msgSender, isDecisionActive);
     // 回传确认电波，终止双方在该维度的后续无意义协商
@@ -195,7 +195,7 @@ public class ChoiceHeuristic<T> extends SelectorFactor<T> {
   private void shiftCostEvaluationFunction(boolean activationStatus) {
     // 备份当前正在使用的原始评估基准函数
     CardinalityFunction originalEvaluationFunction = this.getFunction();
-    
+
     // 利用匿名内部类，构建一个具有偏移量的新评估函数
     CardinalityFunction shiftedFunction = new CardinalityFunction() {
         @Override
@@ -205,7 +205,7 @@ public class ChoiceHeuristic<T> extends SelectorFactor<T> {
             return originalEvaluationFunction.getCost(shiftedCount);
         }
     };
-    
+
     // 用偏移后的新函数覆盖旧函数，完成系统状态的不可逆推进
     this.setFunction(shiftedFunction);
   }

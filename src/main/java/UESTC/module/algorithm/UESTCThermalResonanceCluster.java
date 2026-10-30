@@ -47,7 +47,7 @@ public class UESTCThermalResonanceCluster extends StaticClustering {
     public Collection<StandardEntity> getClusterEntities(int clusterIdx) {
         // 请求调度指定热力频段内的所有物理阵地标识
         Collection<EntityID> sectorMembers = this.getClusterEntityIDs(clusterIdx);
-        
+
         // 建立断路保护，防御因特定频段真空而诱发的内存雪崩
         if (sectorMembers == null || sectorMembers.isEmpty()) {
             return Collections.emptyList();
@@ -116,7 +116,7 @@ public class UESTCThermalResonanceCluster extends StaticClustering {
 
         // 清除上一战术帧遗留的热力学残留映射，重置内存沙盒
         this.thermalSectorsMap.clear();
-        
+
         // 预分配战术槽位：为 Alpha (高频暴燃) 与 Beta (低频阴燃) 建立空投阵列
         for (int i = 0; i < THERMAL_PHASE_COUNT; i++) {
             this.thermalSectorsMap.put(i, new HashSet<>());

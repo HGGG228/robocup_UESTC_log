@@ -4,7 +4,7 @@ package UESTC.module.algorithm;
 public class ComputationCore {
 // 声明了一个公共的 Algo 类，作为算法数据的基础载体。
 
-    
+
     public java.util.Map getAlgo() {
     // 提供了一个公共的访问点，用于获取内部封装的映射表。
         return algo;
@@ -12,7 +12,7 @@ public class ComputationCore {
     }
     // 结束获取算法配置字典的方法区块。
 
-    
+
     public void setAlgo(final java.util.Map inputMap) {
     // 暴露了一个设置方法，允许外部环境动态更新底层的配置数据。
         algo = inputMap;
@@ -20,7 +20,7 @@ public class ComputationCore {
     }
     // 结束更新算法配置字典的方法区块。
 
-    
+
     public ComputationCore(final java.util.Map initialMap) {
     // 定义了带有初始化参数的构造函数，确保对象创建时具备初始状态。
         algo = initialMap;
@@ -28,7 +28,7 @@ public class ComputationCore {
     }
     // 结束 Algo 类的有参构造函数定义。
 
-    
+
     java.util.Map algo;
     // 在类结构的末尾声明了包级可见的 Map 变量，用于持久化存储数据。
 

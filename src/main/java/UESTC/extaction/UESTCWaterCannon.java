@@ -53,7 +53,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
     private final int THOLD_ENOUGH_WATER;
     // 忍耐原地卡死的最大物理帧数
     private static final int THOLD_STUCK_TIME = 2;
-    
+
     // 连续陷入泥沼或废墟无法移动的时钟计数器
     private int countStuck = 0;
     // 灾难模拟系统预计强制结束的最后时钟刻度
@@ -74,11 +74,11 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
     // -------------------------------------------------------------------------
     public UESTCWaterCannon(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager mm, DevelopData dd) {
         super(ai, wi, si, mm, dd);
-        
+
         // 提取仿真环境中的喷水枪单次最大消耗量，作为极度缺水警戒线
         int maxExtinguishSum = si.getFireExtinguishMaxSum();
         this.THOLD_LACKOF_WATER = maxExtinguishSum;
-        
+
         // 调换了模块初始化的先后顺序（独立语句换序，不影响逻辑）
         this.stuckHumans = moduleManager.getModule("UESTC.FB.ExtActionFireFighting.StuckHumans");
         this.pathPlaner = moduleManager.getModule("UESTC.FB.ExtActionFireFighting.PathPlanning");
@@ -86,11 +86,11 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         // 根据本机的唯一数字ID生成伪随机对象
         long seedValue = ai.getID().getValue();
         Random r = new Random(seedValue);
-        
+
         // 提取消防车水槽物理上限，并计算出90%的充裕值
         double maxTankVol = si.getFireTankMaximum();
         this.THOLD_ENOUGH_WATER = (int) (maxTankVol * 0.9);
-        
+
         // 设定随机的防卡死步数，范围在2到4之间
         this.NUM_TRY_MOVE = r.nextInt(3) + 2;
     }
@@ -98,31 +98,31 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
     // -------------------------------------------------------------------------
     // 核心决策大脑 (Calc) 与 动作管线
     // -------------------------------------------------------------------------
-    
+
     @Override
     public ExtAction calc() {
         // 每回合初始化动作输出流为 null
         this.result = null;
-        
+
         // 提取判断条件：如果没有下达攻击目标
         boolean hasNoTarget = (this.target == null);
-        
+
         // 目标丢失或未指派时，放弃运算直接返回挂起状态
         if (hasNoTarget) {
             return this;
         }
-        
+
         // 【优先级1】：优先演算后勤恢复动作（回血或抽水）
         Action recoveryAction = this.calcRecover();
         // 将后勤动作暂存入执行槽
         this.result = recoveryAction;
-        
+
         // 【优先级2】：演算前线灭火交战动作
         Action combatAction = this.calcExtinguish();
         // 如果 calcExtinguish 内部检测到 this.result 已经有值，它会直接返回旧值。
         // 这是严格遵守你原代码的逻辑和优先级的核心机制。
         this.result = combatAction;
-        
+
         // 输出最终裁定的行为策略
         return this;
     }
@@ -138,12 +138,12 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         int maxFireRange = this.scenarioInfo.getFireExtinguishMaxDistance();
         // 提取水炮单次喷射的液压功率设定值
         int extinguishPower = this.scenarioInfo.getFireExtinguishMaxSum();
-        
+
         // 获取自身当前所处位置坐标ID
         EntityID myPositionID = this.agentInfo.getPosition();
         // 使用欧式几何计算自身与起火目标的直线物理距离
         double distanceToTarget = this.worldInfo.getDistance(myPositionID, this.target);
-        
+
         // 将原版的长串条件判断拆解，提升阅读清晰度并改变视觉结构
         boolean isStuckLongEnough = (this.countStuck >= THOLD_STUCK_TIME);
         boolean isInRange = (distanceToTarget < maxFireRange);
@@ -198,13 +198,13 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
                 drivePath.remove(drivePath.size() - 1);
             }
         }
-        
+
         // 为保证安全交战距离，如果剔除后路径依然可前进
         if (drivePath.size() > 1) {
             // 继续剔除倒数第二步，形成火场外的缓冲驻扎带
             drivePath.remove(drivePath.size() - 1);
         }
-        
+
         // 封装为位移动作返回
         return new ActionMove(drivePath);
     }
@@ -235,7 +235,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
                 return new ActionRefill();
             }
         }
-        
+
         // 场景分析：如果急需加水，且正好压在消防栓上
         if (needsWater) {
             if (groundEntity instanceof Hydrant) {
@@ -249,7 +249,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
 
         // 全局搜索代价最低的避难所网格
         EntityID optimalDest = this.findBestDestOf(REFUGE);
-        
+
         // 若找不到避难所但依然面临水荒
         if (needsWater) {
             if (optimalDest == null) {
@@ -257,7 +257,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
                 optimalDest = this.findBestDestOf(HYDRANT);
             }
         }
-        
+
         // 彻底绝望，全图无点可去
         if (optimalDest == null) {
             return null;
@@ -267,7 +267,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         this.pathPlaner.setFrom(groundEntity.getID());
         this.pathPlaner.setDestination(optimalDest);
         List<EntityID> supplyRoute = this.pathPlaner.calc().getResult();
-        
+
         // 验证路线并发布位移指令
         boolean hasValidRoute = !supplyRoute.isEmpty();
         if (hasValidRoute) {
@@ -284,21 +284,21 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
     private boolean needRest() {
         // 提取载具的人形基类属性
         Human selfEntity = (Human) this.agentInfo.me();
-        
+
         // 读取当前残存血量与每回合受损速率
         int currentHp = selfEntity.getHP();
         int currentDamage = selfEntity.getDamage();
-        
+
         // 如果处于无敌状态或健康未流血
         if (currentHp == 0 || currentDamage == 0) {
             return false;
         }
-        
+
         // 将原版算式拆分为变量：计算完整除法周期
         int fullCycles = currentHp / currentDamage;
         // 提取余数以研判是否需要进位
         int remainder = currentHp % currentDamage;
-        
+
         // 原版三目运算拆分：预估还能存活的物理回合数
         int aliveEstimate;
         if (remainder != 0) {
@@ -306,14 +306,14 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         } else {
             aliveEstimate = fullCycles;
         }
-        
+
         // 获取当前流逝的绝对时间轴
         int currentTimeTick = this.agentInfo.getTime();
-        
+
         // 判定条件1：单次受损超限；判定条件2：活不到灾难结束
         boolean isDamageCritical = (currentDamage > THOLD_SHOULD_REST);
         boolean isGoingToDieSoon = (aliveEstimate + currentTimeTick < this.endTime);
-        
+
         return isDamageCritical || isGoingToDieSoon;
     }
 
@@ -322,14 +322,14 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         int now = this.agentInfo.getTime();
         // 倒查上一帧系统指令的执行记录
         Action previousAction = this.agentInfo.getExecutedAction(now - 1);
-        
+
         // 获取本机储水罐数据
         FireBrigade me = (FireBrigade) this.agentInfo.me();
         int currentWaterLevel = me.getWater();
-        
+
         // 判定上一帧是否正在实施加水作业
         boolean wasRefilling = (previousAction instanceof ActionRefill);
-        
+
         // 将原版的 if-else 拆解提纯
         if (wasRefilling) {
             // 如果已经在加水，则必须加到充裕阈值才停手
@@ -353,12 +353,12 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
 
         // 获取全部友方消防兵团的花名册
         Collection<EntityID> allBrigades = this.worldInfo.getEntityIDsOfType(FIRE_BRIGADE);
-        
+
         // 遍历整个网格
         for (EntityID brigadeID : allBrigades) {
             // 提取友军驻防坐标
             StandardEntity friendPosition = this.worldInfo.getPosition(brigadeID);
-            
+
             // 查验对方是否跟我们站在同一个消防栓上
             boolean isSamePosition = friendPosition.equals(ent);
             if (isSamePosition) {
@@ -370,14 +370,14 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
                 }
             }
         }
-        
+
         // 如果查无此人，返回false；如果存在最高长官且刚好是自己，也返回不被霸占
         boolean hasTopCommander = (topRankCommander != null);
         boolean amITopCommander = false;
         if (hasTopCommander) {
             amITopCommander = topRankCommander.equals(this.agentInfo.getID());
         }
-        
+
         // 必须有人站着，且那个人刚好是自己，才算没被外人占用
         return hasTopCommander && amITopCommander;
     }
@@ -392,7 +392,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         // 获取当前时钟进度并提取上一帧指令
         int timeNow = this.agentInfo.getTime();
         Action lastFrameAction = this.agentInfo.getExecutedAction(timeNow - 1);
-        
+
         // 如果上一帧压根没尝试过移动，谈不上卡死
         boolean triedToMove = (lastFrameAction instanceof ActionMove);
         if (!triedToMove) {
@@ -402,13 +402,13 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         // 强转以获取历史轨迹缓冲池
         Human baseBody = (Human) this.agentInfo.me();
         int[] posHistoryArray = baseBody.getPositionHistory();
-        
+
         // 检查数组有效性，计算容量
         int arrayCapacity = -1;
         if (posHistoryArray != null) {
             arrayCapacity = posHistoryArray.length;
         }
-        
+
         // 容量小于2意味着数据丢失撕裂，强行打下当前物理坐标锚点并判定异常抛锚
         if (arrayCapacity < 2) {
             Pair<Integer, Integer> rawCoord = this.worldInfo.getLocation(this.agentInfo.me());
@@ -420,12 +420,12 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         int xFirst = posHistoryArray[0];
         int yFirst = posHistoryArray[1];
         Point2D originMark = new Point2D(xFirst, yFirst);
-        
+
         // 提取尾部的残像坐标点
         int xLast = posHistoryArray[arrayCapacity - 2];
         int yLast = posHistoryArray[arrayCapacity - 1];
         this.lastPoint = new Point2D(xLast, yLast);
-        
+
         // 查验首尾坐标是否发生重叠
         return this.isSamePos(originMark, this.lastPoint);
     }
@@ -443,15 +443,15 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         if (isP1Null || isP2Null) {
             return false;
         }
-        
+
         // 计算两点差距。原版中保留了忽略 Y 轴相减的特性代码 (p2.getY() - p2.getY())
         double diffX = p1.getX() - p2.getX();
         double diffY = p2.getY() - p2.getY(); // 严格锁死你原代码的微妙计算
-        
+
         // 调用底层数学库计算斜边偏差值
         double hypotenuse = Math.hypot(diffX, diffY);
         int intDeviation = (int) hypotenuse;
-        
+
         // 核对偏移范围是否落入死区界限内
         return intDeviation <= THOLD_STUCK_RANGE;
     }
@@ -464,7 +464,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         // 搜集全量指定类型的建筑设施列表
         Collection<StandardEntity> rawEntities = this.worldInfo.getEntitiesOfType(urnType);
         List<StandardEntity> candidateList = new ArrayList<>(rawEntities);
-        
+
         // 准备打擂台的记录板
         EntityID championID = null;
         int minimumCostRecord = Integer.MAX_VALUE;
@@ -477,7 +477,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
                 EntityID candidateID = candidate.getID();
                 // 抛入探针计算拓扑网络消耗
                 int currentTravelCost = this.evaluateDest(candidateID);
-                
+
                 // 挑战现有的最优记录
                 if (currentTravelCost < minimumCostRecord) {
                     minimumCostRecord = currentTravelCost;
@@ -491,13 +491,13 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
     private int evaluateDest(EntityID entId) {
         // 获取机体所在当前图灵节点
         EntityID rootPositionID = this.agentInfo.getPosition();
-        
+
         // 设定前半程：奔赴目标物资点
         this.pathPlaner.setFrom(rootPositionID);
         this.pathPlaner.setDestination(entId);
         List<EntityID> forwardRoute = this.pathPlaner.calc().getResult();
         int tripCostA = forwardRoute.size();
-        
+
         // 如果当前身背火场灭火重任，还需核算折返跑代价
         boolean hasActiveTarget = (this.target != null);
         if (hasActiveTarget) {
@@ -506,7 +506,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
             this.pathPlaner.setDestination(this.target);
             List<EntityID> returnRoute = this.pathPlaner.calc().getResult();
             int tripCostB = returnRoute.size();
-            
+
             // 返回来回双程总开销
             return tripCostA + tripCostB;
         } else {
@@ -522,13 +522,13 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
     @Override
     public ExtAction updateInfo(MessageManager messageManager) {
         super.updateInfo(messageManager);
-        
+
         // 防冗余更新阀门
         boolean isDuplicateUpdate = (this.getCountUpdateInfo() > 1);
         if (isDuplicateUpdate) {
             return this;
         }
-        
+
         // 调换更新顺序：先更新受困探针，再更新寻路探针
         this.stuckHumans.updateInfo(messageManager);
         this.pathPlaner.updateInfo(messageManager);
@@ -538,12 +538,12 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         Integer coordX = mapCoord.first();
         Integer coordY = mapCoord.second();
         Point2D currentVectorPoint = new Point2D(coordX, coordY);
-        
+
         // 并列条件拆解：检验是否发生拥堵异常
         boolean isInBlockadeZone = this.inBlockades();
         boolean isInBugstuckZone = this.inBugstucks();
         boolean isStuckDetected = (isInBlockadeZone || isInBugstuckZone);
-        
+
         // 只有刚刚陷入卡死，才下坐标锚点
         if (isStuckDetected) {
             if (this.countStuck == 0) {
@@ -555,7 +555,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
                 }
             }
         }
-        
+
         // 判定车体是否依然徘徊在死锁坐标系内
         boolean isStillEntrappedState = this.isSamePos(currentVectorPoint, this.stuckPoint);
         if (isStillEntrappedState) {
@@ -566,7 +566,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
 
         // 读取沙盘总时钟刻度
         int globalTime = this.agentInfo.getTime();
-        
+
         // 发送救援警报机制冷却期核验
         boolean needsHelp = (this.countStuck > 0);
         boolean isRadioCooledDown = (this.sentTimeCmdP <= globalTime);
@@ -580,10 +580,10 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         // 战后火情鉴定：调阅前一秒的开火录像
         int previousTimeFrame = globalTime - 1;
         Action pastAction = this.agentInfo.getExecutedAction(previousTimeFrame);
-        
+
         Building extinguishedTarget = null;
         boolean wasExtinguishing = (pastAction instanceof ActionExtinguish);
-        
+
         // 核实验明上一次执行的任务身份
         if (wasExtinguishing) {
             ActionExtinguish fireAttack = (ActionExtinguish) pastAction;
@@ -591,7 +591,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
             StandardEntity attackedEntity = this.worldInfo.getEntity(attackTargetID);
             extinguishedTarget = (Building) attackedEntity;
         }
-        
+
         // 若有射击记录且目标健在
         boolean hasValidBuilding = (extinguishedTarget != null);
         if (hasValidBuilding) {
@@ -615,10 +615,10 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         if (isIdNull) {
             return this;
         }
-        
+
         // 转换ID为仿真实体对象
         StandardEntity candidateTarget = this.worldInfo.getEntity(id);
-        
+
         // 原版 if-else 判定：只有纯粹的建筑对象才能纳入火力瞄准器
         boolean isBuildingTarget = (candidateTarget instanceof Building);
         if (isBuildingTarget) {
@@ -637,7 +637,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         if (skipPrecompute) {
             return this;
         }
-        
+
         // 并列语句先后调换，不影响执行逻辑
         this.stuckHumans.preparate();
         this.pathPlaner.preparate();
@@ -652,7 +652,7 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         if (skipResume) {
             return this;
         }
-        
+
         try {
             // 引导底层链路启动预热装载
             this.preparate();
@@ -668,12 +668,12 @@ public class UESTCWaterCannon extends ExtAction implements WaterCannonBroadcaste
         super.preparate();
         // 执行限制验证
         boolean canPreparate = (this.getCountPreparate() <= 1);
-        
+
         if (canPreparate) {
             // 并列语句调换装载顺序
             this.stuckHumans.preparate();
             this.pathPlaner.preparate();
-            
+
             try {
                 // 同步获取灾难内核推演大结局的时钟
                 int totalSteps = this.scenarioInfo.getKernelTimesteps();

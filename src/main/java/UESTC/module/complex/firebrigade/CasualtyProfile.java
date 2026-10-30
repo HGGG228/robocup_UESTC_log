@@ -44,12 +44,12 @@ public class CasualtyProfile extends AbstractModule {
 
     // 自身救援需求标志。如果我这辆消防车自己都被埋了，标志位置为 true。
     private boolean isMyselfBuried = false;
-    
+
     // 战地分类名册（垃圾桶）：分门别类记录当前急需处理的人员
     private final Set<EntityID> civilianDiggingRoster = new HashSet<>(); // 待挖掘平民
     private final Set<EntityID> teammateDiggingRoster = new HashSet<>(); // 待挖掘战友（各路同行）
     private final Set<EntityID> civilianLoadingRoster = new HashSet<>(); // 待装车平民（没被埋但受伤）
-    
+
     // 广播备忘录
     private final Set<EntityID> voiceBroadcastedTargets = new HashSet<>(); // 已经用嗓子喊过话的求救目标，防刷屏
     private final Set<EntityID> cooperativeRescueRequests = new HashSet<>(); // 收到的要求我过去协同挖掘的高级指令
@@ -78,16 +78,16 @@ public class CasualtyProfile extends AbstractModule {
     public AbstractModule updateInfo(MessageManager mm) {
         // 聘请专属通信兵来处理繁杂的电报业务
         CommunicationsOfficer commsOfficer = new CommunicationsOfficer();
-        
+
         // 管线 1.1：处理外来的求救电报，有救的登记，死了的拉黑
         commsOfficer.processIncomingTelegrams(mm);
-        
+
         // 管线 1.2：清理死亡或获救人员的档案，保持花名册的纯净
         this.purgeInvalidRosters();
-        
+
         // 管线 1.3：呼叫附近的同行来帮忙挖人（协同作战机制）
         commsOfficer.broadcastCooperativeCommands(mm);
-        
+
         return this;
     }
 
@@ -102,10 +102,10 @@ public class CasualtyProfile extends AbstractModule {
     @Override
     public AbstractModule calc() {
         final EntityID mySelfId = this.agentInfo.getID();
-        
+
         // 聘请战地军医来进行生死判定
         BattlefieldMedic medic = new BattlefieldMedic();
-        
+
         // 自身体检：如果我自己都被埋了，直接躺平，停止情报收集工作
         this.isMyselfBuried = medic.evaluateNeedsDigging(mySelfId);
         if (this.isMyselfBuried) return this;
@@ -122,21 +122,21 @@ public class CasualtyProfile extends AbstractModule {
         // 挨个把伤员拉过来检伤
         for (EntityID currentId : visibleEntities) {
             StandardEntity rawEntity = this.worldInfo.getEntity(currentId);
-            
+
             // 不是人（含载具）的直接略过
             if (!(rawEntity instanceof Human)) continue;
-            
+
             StandardEntity locationEntity = this.worldInfo.getPosition(currentId);
             // 安全屋豁免：如果这个人已经在避难所（医院）里了，那是绝对安全的，跳过
             if (locationEntity.getStandardURN().equals(REFUGE)) continue;
-            
+
             // 军医做出诊断：这人需要挖吗？需要抬走吗？
             boolean needsDigging = medic.evaluateNeedsDigging(currentId);
             boolean needsLoading = medic.evaluateNeedsLoading(currentId);
-            
+
             StandardEntityURN entityType = rawEntity.getStandardURN();
             EntityID locationId = locationEntity.getID();
-            
+
             // 按兵种登记造册
             if (entityType.equals(AMBULANCE_TEAM)) {
                 if (needsDigging) {
@@ -168,7 +168,7 @@ public class CasualtyProfile extends AbstractModule {
                     Set<EntityID> squad = civDistributionMap.getOrDefault(locationId, new HashSet<>());
                     squad.add(currentId);
                     civDistributionMap.put(locationId, squad);
-                    
+
                     // 平民被埋，列入平民挖掘日常名单
                     this.civilianDiggingRoster.add(currentId);
                 } else if (needsLoading) {
@@ -213,7 +213,7 @@ public class CasualtyProfile extends AbstractModule {
         boolean evaluateNeedsLoading(EntityID suspectId) {
             Human victim = (Human) worldInfo.getEntity(suspectId);
             if (victim == null) return false;
-            
+
             int hp = victim.getHP();
             int buriedDepth = victim.getBuriedness();
             return (hp > 0 && buriedDepth == 0);
@@ -233,16 +233,16 @@ public class CasualtyProfile extends AbstractModule {
             // 从邮差（MessageManager）手里接过四大兵种的信件堆
             List<CommunicationMessage> civMails = mm.getReceivedMessageList(MessageCivilian.class);
             for (CommunicationMessage rawMsg : civMails) interpretCivilianTelegram((MessageCivilian) rawMsg);
-            
+
             List<CommunicationMessage> fbMails = mm.getReceivedMessageList(MessageFireBrigade.class);
             for (CommunicationMessage rawMsg : fbMails) interpretTeammateTelegram((MessageFireBrigade) rawMsg);
-            
+
             List<CommunicationMessage> ambMails = mm.getReceivedMessageList(MessageAmbulanceTeam.class);
             for (CommunicationMessage rawMsg : ambMails) interpretTeammateTelegram((MessageAmbulanceTeam) rawMsg);
-            
+
             List<CommunicationMessage> pfMails = mm.getReceivedMessageList(MessagePoliceForce.class);
             for (CommunicationMessage rawMsg : pfMails) interpretTeammateTelegram((MessagePoliceForce) rawMsg);
-            
+
             // 查收长官下达的高级调度指令
             List<CommunicationMessage> cmdMails = mm.getReceivedMessageList(CommandFire.class);
             for (CommunicationMessage rawMsg : cmdMails) interpretCommandTelegram((CommandFire) rawMsg);
@@ -270,7 +270,7 @@ public class CasualtyProfile extends AbstractModule {
             if (msg instanceof MessageFireBrigade) callerId = ((MessageFireBrigade) msg).getAgentID();
             else if (msg instanceof MessageAmbulanceTeam) callerId = ((MessageAmbulanceTeam) msg).getAgentID();
             else if (msg instanceof MessagePoliceForce) callerId = ((MessagePoliceForce) msg).getAgentID();
-            
+
             if (callerId == null) return;
 
             BattlefieldMedic medic = new BattlefieldMedic();
@@ -290,7 +290,7 @@ public class CasualtyProfile extends AbstractModule {
             if (msg.getToID() != null && msg.getToID().getValue() != agentInfo.getID().getValue()) {
                 return; // 寄错人了，丢弃
             }
-            
+
             // 战术防御：如果我上一秒本来就在执行 ActionRescue (我正在埋头挖人)，
             // 我走不开，不能马上响应。把这个请求先记在小本本里，以免丢包。
             Action lastAction = agentInfo.getExecutedAction(agentInfo.getTime() - 1);
@@ -315,14 +315,14 @@ public class CasualtyProfile extends AbstractModule {
                 Iterator<EntityID> iterator = teammateDiggingRoster.iterator();
                 EntityID EntrappedStateVictimId = iterator.next();
                 StandardEntity victimEntity = worldInfo.getEntity(EntrappedStateVictimId);
-                
+
                 // 无线电静默策略：不每秒发电报，利用模运算随机限制频率，防刷屏
                 boolean shouldTransmitRadio = (agentInfo.getID().getValue() % 10) == (agentInfo.getTime() % 10);
-                
+
                 // 根据倒霉蛋的兵种，生成“强制移动”指令甩给旁边的兄弟
                 if (victimEntity instanceof AmbulanceTeam) {
                     mm.addMessage(new MessageAmbulanceTeam(VOICE_CHANNEL, (AmbulanceTeam) victimEntity, CommandAmbulance.ACTION_MOVE, EntrappedStateVictimId));
-                    if (shouldTransmitRadio) mm.addMessage(new MessageAmbulanceTeam(VOICE_CHANNEL, (AmbulanceTeam) victimEntity, CommandAmbulance.ACTION_MOVE, EntrappedStateVictimId)); 
+                    if (shouldTransmitRadio) mm.addMessage(new MessageAmbulanceTeam(VOICE_CHANNEL, (AmbulanceTeam) victimEntity, CommandAmbulance.ACTION_MOVE, EntrappedStateVictimId));
                 } else if (victimEntity instanceof FireBrigade) {
                     mm.addMessage(new MessageFireBrigade(VOICE_CHANNEL, (FireBrigade) victimEntity, CommandFire.ACTION_MOVE, EntrappedStateVictimId));
                     if (shouldTransmitRadio) mm.addMessage(new MessageFireBrigade(VOICE_CHANNEL, (FireBrigade) victimEntity, CommandFire.ACTION_MOVE, EntrappedStateVictimId));
@@ -330,7 +330,7 @@ public class CasualtyProfile extends AbstractModule {
                     mm.addMessage(new MessagePoliceForce(VOICE_CHANNEL, (PoliceForce) victimEntity, CommandPolice.ACTION_MOVE, EntrappedStateVictimId));
                     if (shouldTransmitRadio) mm.addMessage(new MessagePoliceForce(VOICE_CHANNEL, (PoliceForce) victimEntity, CommandPolice.ACTION_MOVE, EntrappedStateVictimId));
                 }
-                
+
                 // 喊完了，从我自己的呼叫队列里划掉
                 iterator.remove();
                 return; // 一次只发一条大指令
@@ -340,7 +340,7 @@ public class CasualtyProfile extends AbstractModule {
             if (nearbyFireTruckId != null && !cooperativeRescueRequests.isEmpty()) {
                 Iterator<EntityID> iterator = cooperativeRescueRequests.iterator();
                 EntityID urgentTargetId = iterator.next();
-                
+
                 // 直接做二传手，把这个任务甩给旁边的兄弟，让他去挖！
                 mm.addMessage(new CommandFire(VOICE_CHANNEL, nearbyFireTruckId, urgentTargetId, CommandFire.ACTION_RESCUE));
                 iterator.remove();
@@ -351,18 +351,18 @@ public class CasualtyProfile extends AbstractModule {
             // 剥离掉我已经广播过的人，防重发
             Set<EntityID> unsentCivilianTargets = new HashSet<>(civilianDiggingRoster);
             unsentCivilianTargets.removeAll(voiceBroadcastedTargets);
-            
+
             // 如果手头所有的平民我都喊过了，那就从头再来，循环复读
             if (unsentCivilianTargets.isEmpty()) {
                 unsentCivilianTargets = new HashSet<>(voiceBroadcastedTargets);
             }
-            
+
             // 如果确实有人需要救，就扯开嗓门喊！
             if (!unsentCivilianTargets.isEmpty()) {
                 EntityID targetedCivilianId = unsentCivilianTargets.iterator().next();
                 Civilian civEntity = (Civilian) worldInfo.getEntity(targetedCivilianId);
                 mm.addMessage(new MessageCivilian(VOICE_CHANNEL, civEntity));
-                
+
                 // 记在小本本上：这个人我已经广播过了
                 voiceBroadcastedTargets.add(civEntity.getID());
             }
@@ -379,22 +379,22 @@ public class CasualtyProfile extends AbstractModule {
      */
     private void purgeInvalidRosters() {
         BattlefieldMedic medic = new BattlefieldMedic();
-        
+
         Iterator<EntityID> iterator = this.civilianDiggingRoster.iterator();
         while (iterator.hasNext()) {
             if (!medic.evaluateNeedsDigging(iterator.next())) iterator.remove();
         }
-        
+
         iterator = this.teammateDiggingRoster.iterator();
         while (iterator.hasNext()) {
             if (!medic.evaluateNeedsDigging(iterator.next())) iterator.remove();
         }
-        
+
         iterator = this.civilianLoadingRoster.iterator();
         while (iterator.hasNext()) {
             if (!medic.evaluateNeedsLoading(iterator.next())) iterator.remove();
         }
-        
+
         iterator = this.voiceBroadcastedTargets.iterator();
         while (iterator.hasNext()) {
             if (!medic.evaluateNeedsDigging(iterator.next())) iterator.remove();

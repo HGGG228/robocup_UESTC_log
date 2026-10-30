@@ -1,5 +1,6 @@
 package UESTC.module.algorithm;
 
+import UESTC.module.util.AgentTelemetry;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -58,7 +59,7 @@ public class BoundaryNavigation extends PathPlanning {
             // 声明搜集当前物理网格所有连通邻接点的方法。
             Area mapNode = (Area) worldInfo.getEntity(this.getID());
             // 依据实体标识符从世界模型中解析出具体的面状区域对象。
-            
+
             return mapNode.getNeighbours().stream()
                     // 提取区域的邻接标识集并转化为数据流以便链式处理。
                     .map(this::build)
@@ -93,7 +94,7 @@ public class BoundaryNavigation extends PathPlanning {
         // 提取当前待评估区域的唯一实体标识符。
         Collection<Blockade> localObstacles = this.worldInfo.getBlockades(mapNodeId);
         // 从仿真环境中检索依附于该区域的所有路障实体。
-        
+
         Geometry navigableSpace = SpatialMorphologyCore.computePassable(mapNode, localObstacles);
         // 运用几何处理器剔除路障占位，求解出绝对可通行的二维空间布尔面。
 
@@ -176,12 +177,12 @@ public class BoundaryNavigation extends PathPlanning {
         // 强制驱动外部拓扑聚类引擎执行实时的图论分割与计算任务。
         EntityID selfId = this.agentInfo.getID();
         // 提取当前执行此算法实体的全局唯一标志码。
-        
+
         int partitionIndex = this.topologyPartitionEngine.getClusterIndex(selfId);
         // 向底层聚类框架查询当前实体被划分归属的特定子图分区索引号。
         Collection<EntityID> partitionNodes = this.topologyPartitionEngine.getClusterEntityIDs(partitionIndex);
         // 根据返回的索引索要该拓扑分区内涵盖的全部图论节点数据集合。
-        
+
         this.localTopologyPartition.addAll(partitionNodes);
         // 将提取到的关联节点全量注入至本地缓存的分区数据存储结构中。
     }
@@ -191,7 +192,7 @@ public class BoundaryNavigation extends PathPlanning {
         // 声明计算单步移动真实代价权重的量化处理函数。
         double baseTraversalWeight = this.worldInfo.getDistance(targetId, ancestorNode.getID());
         // 通过世界模型测量两端节点欧氏直线距离作为基准移动耗散成本。
-        
+
         if (this.isExpressway(ancestorNode.getID())) {
             // 校验出发端点是否隶属于全局高速连通骨干网络。
             return baseTraversalWeight;
@@ -201,7 +202,7 @@ public class BoundaryNavigation extends PathPlanning {
 
         baseTraversalWeight *= 3.0;
         // 对未处于干线内的普通街区行进施加常规环境阻力乘数惩罚。
-        
+
         return this.checkBlockage(targetId, ancestorNode) ? (baseTraversalWeight * INVALID_PENALTY) : baseTraversalWeight;
         // 终极裁定该路径若遭路障斩断则附加失效重罚，否则返回现有核算权重。
     }
@@ -254,8 +255,12 @@ public class BoundaryNavigation extends PathPlanning {
     @Override
     // 覆写继承于父类架构体系下的路径演算中枢启动调度方法。
     public PathPlanning calc() {
+        long started = System.nanoTime();
         // 确立发起执行全量启发式图谱导航求解流程的执行访问极点。
         this.optimalRouteSequence = HeuristicSearchBase.find(new Node(this.routingAnchorStart), this.routingAnchorEnd);
+        AgentTelemetry.path(this.agentInfo, this.worldInfo, "BoundaryNavigation",
+                this.routingAnchorStart, this.routingAnchorEnd, this.optimalRouteSequence,
+                System.nanoTime() - started);
         // 封引起始坐标构建演算根节点，投送至底层寻径框架以生成全局极优行进链表序列。
         return this;
         // 置回本级工作台的单例指针，用以支援外部指令结构的级联点调。
@@ -268,7 +273,7 @@ public class BoundaryNavigation extends PathPlanning {
         // 确立承接单次仿真通信事件迭代信息包刷新的输入函数端点。
         super.updateInfo(messageManager);
         // 转交调度权柄于超类，使其得以处理底层基础的报文梳理及缓存清理工作。
-        
+
         if (this.getCountUpdateInfo() > 1) {
             // 构筑反并发防护卡口，检验本仿真帧内是否诱发了多线程重复唤醒操作。
             return this;
@@ -373,7 +378,7 @@ public class BoundaryNavigation extends PathPlanning {
     // 开辟持久性拓扑阻隔黑名单字典树专职储留各地块内部遭受灾损引发的死胡同废弃双边关联表册。
     private final Set<EntityID> localTopologyPartition = new HashSet<>();
     // 申请专属哈希无序集以凝固收容经聚类引擎剖划分配而来的本机活动辖区子图网格阵列名单。
-    
+
     private final Clustering topologyPartitionEngine;
     // 分配挂靠控制引用句柄专属羁绊用以统御负责图论空间切片聚合剖析的外援聚类算法机组。
     private final StaticClustering expresswayNetworkEngine;

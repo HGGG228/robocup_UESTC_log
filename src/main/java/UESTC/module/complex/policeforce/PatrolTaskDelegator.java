@@ -1,5 +1,6 @@
 package UESTC.module.complex.policeforce;
 
+import UESTC.module.util.AgentTelemetry;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -76,6 +77,7 @@ public class PatrolTaskDelegator extends PoliceTargetAllocator implements TaskAl
     @Override
     public Map<EntityID, EntityID> getResult() {
         // 郑重交出我们刚刚写满的出警单
+        AgentTelemetry.assignments(this.agentInfo, this.worldInfo, "PatrolTaskDelegator", this.optimizedTacticalMatrix);
         return this.optimizedTacticalMatrix;
     }
 
@@ -143,18 +145,18 @@ public class PatrolTaskDelegator extends PoliceTargetAllocator implements TaskAl
         Set<EntityID> scoutRoadBlockades() {
             // 掏出一个空文件夹，准备记录烂石头
             Set<EntityID> blockadeList = new HashSet<>();
-            
+
             // 去总数据库里，把全城所有“路障（BLOCKADE）”的档案全拉出来
             Collection<EntityID> allBlockades = worldInfo.getEntityIDsOfType(StandardEntityURN.BLOCKADE);
 
             // 戴上老花镜，一堆石头一堆石头地看
             for (EntityID bId : allBlockades) {
                 StandardEntity entity = worldInfo.getEntity(bId);
-                
+
                 // 确保它确实是实体石头
                 if (entity instanceof Blockade) {
                     Blockade rubble = (Blockade) entity;
-                    
+
                     // 战术核验 1：这堆石头是不是太小了，根本不挡路？（维修成本极低）
                     if (rubble.isRepairCostDefined() && rubble.getRepairCost() > 0) {
                         // 确实是一堆拦路石，抄写进清障名单！
@@ -180,7 +182,7 @@ public class PatrolTaskDelegator extends PoliceTargetAllocator implements TaskAl
             // 去上帝视角的地图里，把拥有警察标识的所有实体捞出来
             Collection<EntityID> policeCars = worldInfo.getEntityIDsOfType(StandardEntityURN.POLICE_FORCE);
             Set<EntityID> readyList = new HashSet<>();
-            
+
             // 挨个查验状态
             for (EntityID carId : policeCars) {
                 StandardEntity entity = worldInfo.getEntity(carId);
@@ -210,13 +212,13 @@ public class PatrolTaskDelegator extends PoliceTargetAllocator implements TaskAl
         Map<EntityID, EntityID> formulateClearancePlan(Set<EntityID> policeCars, Set<EntityID> blockades) {
             // 摊开一张崭新的排班表
             Map<EntityID, EntityID> battlePlan = new HashMap<>();
-            
+
             // 请出冷酷无情的价值评估师
             ValueAssessor assessor = new ValueAssessor();
 
             // 挨个点名排好队的警车
             for (EntityID carId : policeCars) {
-                
+
                 // 默认这辆车还没找到要挖的石头
                 EntityID bestBlockadeTarget = null;
                 // 记录这辆车目前遇到的最高得分（默认设为一个极小的负数兜底）
@@ -224,10 +226,10 @@ public class PatrolTaskDelegator extends PoliceTargetAllocator implements TaskAl
 
                 // 针对这辆特定的车，拉出所有的石头堆，挨个让它挑
                 for (EntityID blockadeId : blockades) {
-                    
+
                     // 评估师按计算器：算算这辆车跑去锯这块石头，能拿多少性价比分？
                     double currentScore = assessor.evaluateTargetScore(carId, blockadeId);
-                    
+
                     // 打擂台！如果这块石头的得分，比之前见过的所有石头都要高！
                     if (currentScore > highestPriorityScore) {
                         // 刷新最高分记录
@@ -260,10 +262,10 @@ public class PatrolTaskDelegator extends PoliceTargetAllocator implements TaskAl
          * 物理意义：分数越高，代表这块石头越恶心，越值得这辆警车马上开过去锯掉。
          */
         double evaluateTargetScore(EntityID carId, EntityID blockadeId) {
-            
+
             // 1. 物理距离阻力：拉起皮尺，量出警车和石头堆之间的真实物理距离
             double distance = worldInfo.getDistance(carId, blockadeId);
-            
+
             // 物理防线：如果车刚好就停在石头上（距离为0），为了防止除数为0导致宇宙爆炸，强行设为1毫米
             if (distance <= 0) {
                 distance = 1.0;
@@ -273,7 +275,7 @@ public class PatrolTaskDelegator extends PoliceTargetAllocator implements TaskAl
             Blockade rubble = (Blockade) worldInfo.getEntity(blockadeId);
             // 看看它有多硬？需要多少电锯耐久度才能锯开？
             int difficultyCost = rubble.isRepairCostDefined() ? rubble.getRepairCost() : 100;
-            
+
             // 3. 阻塞面积乘数：越庞大的废墟越需要警车
             // 修复：官方 API 提取顶点数组是 getApexes()，而不是 getApexList()
             int rubbleShapeSize = rubble.isApexesDefined() ? rubble.getApexes().length : 1;

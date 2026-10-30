@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>UESTC-Rescue 协同机制</title>
+<style>
+  :root{
+    --bg:#0e131d; --panel:#18202e; --panel2:#1e2838; --line:#2b3648;
+    --fg:#e8eef7; --dim:#94a3b8; --code:#0b1017;
+    --fire:#f43f5e; --police:#38bdf8; --medic:#10b981; --center:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:30px 26px 60px;background:var(--bg);color:var(--fg);
+    font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;line-height:1.62}
+  h1{font-size:23px;margin:0 0 6px}
+  .sub{color:var(--dim);font-size:13.5px;margin:0 0 26px}
+  code{font-family:Consolas,"Cascadia Mono",monospace;font-size:12.5px;color:#9fe6c8}
+  .sec{margin:32px 0 12px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px}
+  .sec::after{content:"";flex:1;height:1px;background:var(--line)}
+  .layers{display:flex;flex-direction:column;gap:9px}
+  .layer{display:flex;gap:13px;align-items:flex-start;background:var(--panel);
+    border:1px solid var(--line);border-left-width:4px;border-radius:9px;padding:12px 15px}
+  .layer .idx{font-size:11px;color:var(--dim);letter-spacing:1px;padding-top:3px;min-width:52px}
+  .layer h3{margin:0 0 4px;font-size:14px}
+  .layer p{margin:0;font-size:12.6px;color:#c3cddb}
+  .l4{border-left-color:var(--fire)} .l3{border-left-color:var(--center)}
+  .l2{border-left-color:var(--medic)} .l1{border-left-color:var(--police)}
+  .l4 h3{color:#fda4af} .l3 h3{color:#fcd34d} .l2 h3{color:#6ee7b7} .l1 h3{color:#7dd3fc}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .card h3{margin:0 0 6px;font-size:13.5px}
+  .card p{margin:0 0 6px;font-size:12.5px;color:#c3cddb}
+  .card p:last-child{margin-bottom:0}
+  .tl{display:flex;gap:0;align-items:stretch;overflow-x:auto;padding-bottom:6px}
+  .beat{flex:1 1 0;min-width:158px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:11px 13px;margin-right:22px;position:relative}
+  .beat:last-child{margin-right:0}
+  .beat:not(:last-child)::after{content:"▶";position:absolute;right:-19px;top:50%;
+    transform:translateY(-50%);color:#3f4c63;font-size:14px}
+  .beat .t{font-family:Consolas,monospace;font-size:11px;color:var(--center);margin-bottom:4px}
+  .beat .w{font-size:10.5px;color:var(--dim);margin-bottom:5px;letter-spacing:.4px}
+  .beat .d{font-size:12.4px}
+  .bad{border-color:#5b2130} .bad h3{color:#fda4af}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+    margin:7px 0 0;overflow-x:auto;color:#9fe6c8;font-size:12px}
+  .foot{margin-top:32px;padding-top:14px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+</style>
+</head>
+<body>
+
+<h1>UESTC-Rescue 协同机制</h1>
+<p class="sub">协同不是一种机制，是四层叠起来的。下面从最底层往上排，越往上越"显式"。</p>
+
+<div class="sec">四层协同</div>
+<div class="layers">
+  <div class="layer l1">
+    <div class="idx">底层</div>
+    <div>
+      <h3>分区：先决定"谁负责哪一片"</h3>
+      <p>靠聚类算法把地图切成几块，每个小队认领一块。没有这一层，所有单位会往同一个热点挤。<br>
+      对应代码：<code>MergeGroupings</code>（动态聚类）、<code>CentroidDivisionSystem</code>（分割）、<code>NeighborBuildingSearch</code>（建筑邻接）。</p>
+    </div>
+  </div>
+  <div class="layer l2">
+    <div class="idx">第二层</div>
+    <div>
+      <h3>信息共享：把自己看到的讲出来</h3>
+      <p>每个单位把"我看到的东西"编成标准报文广播出去。这是最基础也最容易失效的一层。<br>
+      对应代码：<code>UESTCPacketDispatcher</code>（按带宽择优选信道发出去）、<code>UESTCBandListener</code>（决定听哪些频道）。</p>
+    </div>
+  </div>
+  <div class="layer l3">
+    <div class="idx">第三层</div>
+    <div>
+      <h3>集中指挥：指挥中心拍板"谁去哪"</h3>
+      <p>指挥中心汇总全局信息，算出"单位 → 目标"的映射表，再编成命令发给对应小队。<br>
+      对应代码：<code>PatrolTaskDelegator</code> / <code>UESTCDispatcher</code> 算映射表 → <code>PickerDispatcher</code> 编成 <code>CommandFire</code> / <code>CommandPolice</code> / <code>CommandAmbulance</code> 发出。<br>
+      <b>注意</b>：只有在有指挥中心的地图（如 <code>kobe</code>）这一层才存在；<code>kobe1</code> 这种没有中心的地图，这一层直接不存在。</p>
+    </div>
+  </div>
+  <div class="layer l4">
+    <div class="idx">最上层</div>
+    <div>
+      <h3>跨兵种专线：把话说到该听的人耳朵里</h3>
+      <p>给三个兵种各开一条专用信道，用"报文类型白名单"过滤：本兵种的消息无条件放行，其他兵种的按需放行。<br>
+      对应代码：<code>BlazeRescueLink</code>（消防）、<code>MedicRescueLink</code>（医疗）、<code>RoadClearanceLink</code>（警察）。</p>
+    </div>
+  </div>
+</div>
+
+<div class="sec">一次真实的跨兵种协同长什么样</div>
+<div class="tl">
+  <div class="beat">
+    <div class="t">t = 40</div>
+    <div class="w">医疗队</div>
+    <div class="d">视线扫到一栋楼里有平民，<b>被埋深度 12</b>，自己挖不动。</div>
+  </div>
+  <div class="beat">
+    <div class="t">t = 40</div>
+    <div class="w">医疗队</div>
+    <div class="d">把这个平民编成报文，塞进电台发出去。</div>
+  </div>
+  <div class="beat">
+    <div class="t">t = 41</div>
+    <div class="w">指挥中心</div>
+    <div class="d"><b>下一回合才收到</b>（服务器先发感知再收命令，消息天生延迟 1 回合）。</div>
+  </div>
+  <div class="beat">
+    <div class="t">t = 41</div>
+    <div class="w">指挥中心</div>
+    <div class="d">把最近的消防队分配给这个目标，发出 <code>CommandFire</code>。</div>
+  </div>
+  <div class="beat">
+    <div class="t">t = 42+</div>
+    <div class="w">消防队</div>
+    <div class="d">收到命令 → 导航过去 → 破拆 → 把人挖出来。</div>
+  </div>
+</div>
+
+<div class="sec">协同失效时的三个检查点（按顺序查）</div>
+<div class="grid">
+  <div class="card bad">
+    <h3>① 电台真的通了吗</h3>
+    <p>订阅频道数超上限 → 服务器<b>只写日志，智能体毫无反馈</b>，订阅全部作废。</p>
+    <pre>agent X tried to subscribe to N channels
+but only M allowed   ← 见到这行就是没通</pre>
+  </div>
+  <div class="card bad">
+    <h3>② 报文有没有被带宽挤掉</h3>
+    <p>每个频段的字节数是死的。优先级排得不好，关键报文会在发射前被整包丢掉。</p>
+    <pre>bestInjectionSlot &lt; 0 → break  ← 后面全丢</pre>
+  </div>
+  <div class="card bad">
+    <h3>③ 中心到底有没有在指挥</h3>
+    <p>对比 <code>kobe</code>（有中心）和 <code>kobe1</code>（无中心）的成绩。如果两张图分数差不多，说明第三层协同根本没起作用。</p>
+  </div>
+</div>
+
+<div class="sec">当前代码里这一层的已知问题</div>
+<div class="grid">
+  <div class="card bad">
+    <h3>消防站分配器是坏的</h3>
+    <p><code>config/module.cfg</code> 指向的 <code>UESTCFireCompanyAssignment</code> 这个类<b>不存在</b>，消防指挥中心的分配功能实际上没接上。</p>
+  </div>
+  <div class="card bad">
+    <h3>警察搜索链也是坏的</h3>
+    <p><code>UESTCExtActionClear</code> 同样不存在，侦察警力的清障链路断开。</p>
+  </div>
+  <div class="card bad">
+    <h3>频道数推算有误</h3>
+    <p><code>UESTCBandListener</code> 用 <code>频道总数 - 1</code> 当成可用频段数，在 2 频道图上会算错。</p>
+  </div>
+</div>
+
+<div class="foot">
+  依据：<code>config/module.cfg</code>、<code>UESTC/module/comm/*</code>、<code>UESTC/centralized/PickerDispatcher.java</code>、
+  <code>UESTC/module/complex/policeforce/PatrolTaskDelegator.java</code>、<code>UESTC/module/algorithm/MergeGroupings.java</code>。
+</div>
+
+</body>
+</html>
