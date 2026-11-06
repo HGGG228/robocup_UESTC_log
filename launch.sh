@@ -1,14 +1,54 @@
 #!/bin/bash
 
 LOADER="adf.impl.DefaultLoader"
-PARAMS=$*
+MAP_NAME="unknown-map"
+PARAMS=()
 
-cd `dirname $0`
+# This option labels local logs; it is not an ADF/server command-line option.
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --map-name)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        echo "Usage: bash launch.sh --map-name kobe1 -all" >&2
+        exit 2
+      fi
+      MAP_NAME="$2"
+      shift 2
+      ;;
+    --map-name=*)
+      MAP_NAME="${1#*=}"
+      shift
+      ;;
+    *)
+      PARAMS+=("$1")
+      shift
+      ;;
+  esac
+done
 
-if [ ! -z "$1" ]; then
-  ./gradlew launch --args="${LOADER} ${PARAMS}"
+cd -- "$(dirname -- "$0")" || exit 1
+
+if [ "${#PARAMS[@]}" -gt 0 ]; then
+  if [[ ! "$MAP_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]]; then
+    echo "Invalid map name: use letters, numbers, ., _ or - (max 80 characters)." >&2
+    exit 2
+  fi
+  # JavaExec --args uses quotes to keep arguments such as team names together.
+  ARGS="${LOADER}"
+  for PARAM in "${PARAMS[@]}"; do
+    if [[ "$PARAM" != *\"* ]]; then
+      ARGS+=" \"${PARAM}\""
+    elif [[ "$PARAM" != *\'* ]]; then
+      ARGS+=" '${PARAM}'"
+    else
+      echo "An argument cannot contain both single and double quotes; use a config file for that value." >&2
+      exit 2
+    fi
+  done
+  exec ./gradlew launch "-PmapName=${MAP_NAME}" "--args=${ARGS}"
 else
   echo "Options:"
+  echo "--map-name [NAME]                 Log archive label, e.g. kobe1 (does not select server map)"
   echo "-tn                              Team name"
   echo "-t [FB],[FS],[PF],[PO],[AT],[AC] Number of agents"
   echo "-fb [FB]                         Number of FireBrigade"

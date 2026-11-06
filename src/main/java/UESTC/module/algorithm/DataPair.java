@@ -14,7 +14,7 @@ public class DataPair<T> {
     // [SECTION 1] 核心状态字与只读成员 (Core State Variables) - 优先置顶
     // ========================================================================
 
-    
+
     public final T elem1;
     public final T elem2;
 
@@ -36,7 +36,7 @@ public class DataPair<T> {
         if (this == candidateReference) {
             return true;
         }
-        
+
         // [Phase 2: 类型边界与空指针防护] 拦截 null 值以及不同类的对象实例
         if (candidateReference == null || this.getClass() != candidateReference.getClass()) {
             return false;
@@ -46,7 +46,7 @@ public class DataPair<T> {
         DataPair<?> comparedTuple = (DataPair<?>) candidateReference;
 
         // [Phase 4: 状态矩阵比对] 委托给底层 Objects API 处理可能存在的 null 组件比对
-        return Objects.equals(this.elem1, comparedTuple.elem1) && 
+        return Objects.equals(this.elem1, comparedTuple.elem1) &&
                Objects.equals(this.elem2, comparedTuple.elem2);
     }
 
@@ -68,7 +68,7 @@ public class DataPair<T> {
         int hashMultiplierBase = Objects.hashCode(this.elem1);
         // 提取第二组件的哈希累加值
         int hashAccumulator = Objects.hashCode(this.elem2);
-        
+
         // 执行质数散列混淆算法
         return 31 * hashMultiplierBase + hashAccumulator;
     }

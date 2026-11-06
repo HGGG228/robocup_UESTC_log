@@ -1,0 +1,31 @@
+# 编译产物
+build/
+bin/
+out/
+*.class
+
+# Gradle
+.gradle/
+
+# IDE 配置（每人自己一份，不共享）
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# 运行日志（体积大，每次跑都不一样）
+logs/
+*.log
+
+# 预计算缓存（随时可以重新生成）
+precomp_data/
+
+# 测试与临时结果
+test-results/
+*.tmp
+*.bak
+
+
+# Per-map, per-run agent log archives and recovery state
+log-archive/

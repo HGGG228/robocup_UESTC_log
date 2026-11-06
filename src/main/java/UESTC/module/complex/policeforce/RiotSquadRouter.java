@@ -1,5 +1,6 @@
 package UESTC.module.complex.policeforce;
 
+import UESTC.module.util.AgentTelemetry;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.information.MessageCivilian;
 import adf.core.agent.develop.DevelopData;
@@ -55,32 +56,32 @@ public class RiotSquadRouter extends Search {
 
     // 跨区远征惩罚系数。如果是去借别的区的活干，路途遥远，在算距离分时要加上这个惩罚值。
     private double zoneDiagonalPenalty = 0.0;
-    
+
     // 消防车作业区高优定位。全城所有的消防车现在都在哪？这些地方可能正在恶战，需要我优先去！
     private Set<EntityID> activeFireBrigadePositions = new HashSet<>();
-    
+
     // 确诊被埋平民倒计时。听到别人发报说这里有平民被埋了，必须赶在倒计时归零前去看一眼。
     private Map<EntityID, Integer> buriedCiviliansCountdown = new HashMap<>();
 
     // 本回合锁定的巡逻目标。经过所有雷达和算法博弈后，警车这秒钟决定开过去的终点站。
     private EntityID finalSearchTarget;
-    
+
     // 当前防区内的扫楼名单。记录了我这辆车目前负责的这几条街上，还有哪些楼没去看过。
     private Set<EntityID> currentPatrolZone = new HashSet<>();
-    
+
     // 建筑物生命潜能声呐板。Key是一栋楼，Value是里面传出来的求救声(平民ID)。
     private Map<EntityID, Set<EntityID>> buildingLifePotentials = new HashMap<>();
-    
+
     // 已查探的黑名单楼宇。去过一次的楼就记下来，防止鬼打墙来回转圈。
     private Set<EntityID> alreadySearchedBuildings = new HashSet<>();
-    
+
     // 因断头路被迫放弃的楼。明明想去，但底层雷达说路堵死了去不了，加入“以后再说”的名单。
     private Set<EntityID> delayedUnreachableTargets = new HashSet<>();
 
     // ========================================================================
     // 底层探测雷达阵列
     // ========================================================================
-    
+
     private Clustering zonePartitionRadar;     // 全城网格划区雷达
     private Clustering unreachablePathRadar;   // 断头路探测器
     private Clustering physicalTrapRadar;      // 肉体被困探测器
@@ -105,6 +106,15 @@ public class RiotSquadRouter extends Search {
     @Override
     public EntityID getTarget() {
         // 向司机出示这回合要去的目标
+        AgentTelemetry.decision(this.agentInfo, this.worldInfo, "RiotSquadRouter", this.finalSearchTarget,
+            "patrolZoneSize", this.currentPatrolZone.size(),
+            "searchedCount", this.alreadySearchedBuildings.size(),
+            "unreachableCount", this.delayedUnreachableTargets.size(),
+            "voiceBuildingCount", this.buildingLifePotentials.size(),
+            "targetVoiceCount", this.buildingLifePotentials.getOrDefault(this.finalSearchTarget, java.util.Collections.emptySet()).size(),
+            "buriedCivilianReports", this.buriedCiviliansCountdown.size(),
+            "activeFireBrigadePositions", this.activeFireBrigadePositions.size(),
+            "zonePenalty", this.zoneDiagonalPenalty);
         return this.finalSearchTarget;
     }
 
@@ -121,9 +131,9 @@ public class RiotSquadRouter extends Search {
             zonePartitionRadar.calc();
             final EntityID mySelfId = agentInfo.getID();
             final int myAssignedZoneIndex = zonePartitionRadar.getClusterIndex(mySelfId);
-            
+
             Collection<EntityID> rawZoneEntities = zonePartitionRadar.getClusterEntityIDs(myAssignedZoneIndex);
-            
+
             // 提纯：只留下建筑物，剔除马路牙子
             Set<EntityID> cleanBuildingSet = new HashSet<>();
             for (EntityID entityId : rawZoneEntities) {
@@ -143,14 +153,14 @@ public class RiotSquadRouter extends Search {
             final int totalZoneCount = zonePartitionRadar.getClusterNumber();
             final int myOriginalZoneIndex = zonePartitionRadar.getClusterIndex(mySelfId);
             final int oldSize = currentPatrolZone.size();
-            
+
             // 每次跨越一个网格，把那个网格的楼也加进我的待办清单
             for (int step = 1; step < totalZoneCount; ++step) {
                 if (currentPatrolZone.size() > oldSize) break; // 只要加进来了新活，就停止越权
-                
+
                 int nextZoneIndex = myOriginalZoneIndex + step * totalZoneCount;
                 Collection<EntityID> newRawEntities = zonePartitionRadar.getClusterEntityIDs(nextZoneIndex);
-                
+
                 Set<EntityID> cleanBuildingSet = new HashSet<>();
                 for (EntityID entityId : newRawEntities) {
                     if (worldInfo.getEntity(entityId) instanceof Building) cleanBuildingSet.add(entityId);
@@ -175,10 +185,10 @@ public class RiotSquadRouter extends Search {
 
             Set<EntityID> generalBuildings = new HashSet<>();
             for (StandardEntity e : allBuildingEntities) generalBuildings.add(e.getID());
-            
+
             Set<EntityID> safeRefuges = new HashSet<>();
             for (StandardEntity e : allRefugeEntities) safeRefuges.add(e.getID());
-            
+
             // 避难所不用查
             generalBuildings.removeAll(safeRefuges);
 
@@ -230,23 +240,23 @@ public class RiotSquadRouter extends Search {
 
         // 聘请战术情报处来处理极其繁杂的视觉、听觉和电报数据
         TacticalIntelligenceUnit intelUnit = new TacticalIntelligenceUnit();
-        
+
         // 1. 记录所有消防车现在正在哪打硬仗
         intelUnit.trackActiveFireBrigadePositions();
-        
+
         // 2. 看看我之前定的目标是不是走不通？加入断头路黑名单
         intelUnit.checkUnreachableTargets();
-        
+
         // 3. 更新那些被埋平民的生死倒计时
         intelUnit.processBuriedCiviliansVisibility();
-        
+
         // 4. 竖起耳朵听惨叫，把惨叫声映射到具体的楼上
         AcousticSonar sonar = new AcousticSonar();
         sonar.mapAcousticSignalsToBuildings();
-        
+
         // 5. 把我眼睛刚看清楚的楼，统统加入“已查探”黑名单
         intelUnit.logVisuallySearchedBuildings();
-        
+
         // 6. 剔除根本进不去的废墟、着火的楼、已经发现的平民
         intelUnit.cleanseInvalidTargets();
 
@@ -296,7 +306,7 @@ public class RiotSquadRouter extends Search {
         void trackActiveFireBrigadePositions() {
             activeFireBrigadePositions.clear();
             Collection<StandardEntity> allFireTrucks = worldInfo.getEntitiesOfType(FIRE_BRIGADE);
-            
+
             for (StandardEntity fEntity : allFireTrucks) {
                 FireBrigade fb = (FireBrigade) fEntity;
                 if (fb.isPositionDefined()) {
@@ -388,7 +398,7 @@ public class RiotSquadRouter extends Search {
 
             // 如果距离太远（达到极限视距 80% 以上），根本看不清，不算 clear
             if (sightLine.getDirection().getLength() >= maxSightDistance * 0.8) return false;
-            
+
             // 用我的视线去切这栋楼的每一面墙
             for (Edge structuralEdge : targetBuilding.getEdges()) {
                 // 如果这是一堵不透风的实心墙
@@ -406,10 +416,10 @@ public class RiotSquadRouter extends Search {
         void cleanseInvalidTargets() {
             Set<EntityID> changedEntities = worldInfo.getChanged().getChangedEntities();
             Set<EntityID> visibleCivilianIds = new HashSet<>();
-            
+
             for (EntityID cId : changedEntities) {
                 StandardEntity rawEntity = worldInfo.getEntity(cId);
-                
+
                 // 清洗 1：剔除一点损坏都没有（Brokenness=0）的新房子，里面肯定没埋人
                 if (rawEntity instanceof Building) {
                     Building bld = (Building) rawEntity;
@@ -424,9 +434,9 @@ public class RiotSquadRouter extends Search {
                 // 收集可见平民，准备清洗 3
                 if (rawEntity instanceof Civilian) visibleCivilianIds.add(rawEntity.getID());
             }
-            
+
             for (EntityID searchedId : alreadySearchedBuildings) buildingLifePotentials.remove(searchedId);
-            
+
             // 清洗 3：如果肉眼已经看到这些平民了，他们之前发的求救声潜能作废
             for (Set<EntityID> potentialList : buildingLifePotentials.values()) {
                 potentialList.removeAll(visibleCivilianIds);
@@ -445,7 +455,7 @@ public class RiotSquadRouter extends Search {
                 // 只有我管辖的防区内的求救，我才接单！
                 int mySectorIndex = zonePartitionRadar.getClusterIndex(agentInfo.getID());
                 Collection<EntityID> mySectorEntities = zonePartitionRadar.getClusterEntityIDs(mySectorIndex);
-                
+
                 if (mySectorEntities.contains(distressLocationId)) {
                     // 记录电报上的地点，并将电报中声称的“深埋度减 1”作为我出警查探的倒计时！
                     buriedCiviliansCountdown.put(distressLocationId, civMsg.getBuriedness() - 1);
@@ -465,12 +475,12 @@ public class RiotSquadRouter extends Search {
     public Search calc() {
         // 聘请战区规划师
         ZonePlanner planner = new ZonePlanner();
-        
+
         // 战术扩张：如果我负责的楼马上就快查完了，主动去借别的区的活干，防止摸鱼！
         if (planner.evaluateIfExpansionNeeded()) {
             planner.expandPatrolZone();
         }
-        
+
         // 如果全城都被我一网打尽全看光了，清空黑名单开始二刷！
         if (planner.evaluateIfCityIsFullySearched()) {
             this.alreadySearchedBuildings.clear();
@@ -489,7 +499,7 @@ public class RiotSquadRouter extends Search {
 
         // 优先级 2：用声呐板结合物理距离，挑一栋最有希望（叫声最惨、离我最近）的楼
         this.finalSearchTarget = locker.evaluateAcousticAndDistanceTargets(activeCandidates);
-        
+
         return this;
     }
 
@@ -519,7 +529,7 @@ public class RiotSquadRouter extends Search {
         private Set<EntityID> findBuildingsInAcousticRange() {
             int acousticRadius = scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
             EntityID mySelfId = agentInfo.getID();
-            
+
             Collection<StandardEntity> rawEntitiesInRange = worldInfo.getObjectsInRange(mySelfId, acousticRadius);
             Set<EntityID> cleanBuildingSet = new HashSet<>();
             for (StandardEntity entity : rawEntitiesInRange) {
@@ -576,7 +586,7 @@ public class RiotSquadRouter extends Search {
 
                 // 算算物理距离
                 double currentDistanceScore = worldInfo.getDistance(candidateId, agentInfo.getID());
-                
+
                 // 跨区惩罚：如果这栋楼是因为之前路堵死了被迫放弃的，加上一个跨区远征惩罚系数！
                 if (delayedUnreachableTargets.contains(candidateId)) {
                     currentDistanceScore += zoneDiagonalPenalty;
@@ -606,7 +616,7 @@ public class RiotSquadRouter extends Search {
             EntityID myLocationId = agentInfo.getID();
             EntityID optimalBuriedTarget = null;
             double minDistance = Double.MAX_VALUE;
-            
+
             // 分为两档：没有消防车的安全区优先级高，有消防车的火线区优先级低
             boolean foundInSafeZone = false;
 

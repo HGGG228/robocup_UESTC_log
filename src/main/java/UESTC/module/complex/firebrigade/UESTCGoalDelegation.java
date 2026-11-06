@@ -136,18 +136,18 @@ public class UESTCGoalDelegation extends FireTargetAllocator {
         Set<EntityID> scoutBurningBuildings() {
             // 掏出一个空文件夹，准备记录火场
             Set<EntityID> burningList = new HashSet<>();
-            
+
             // 去总数据库里，把全城所有的建筑档案全拉出来
             Collection<EntityID> allBuildings = worldInfo.getEntityIDsOfType(StandardEntityURN.BUILDING);
 
             // 戴上老花镜，一栋楼一栋楼地看
             for (EntityID bldId : allBuildings) {
                 StandardEntity entity = worldInfo.getEntity(bldId);
-                
+
                 // 确保它确实是个实体建筑
                 if (entity instanceof Building) {
                     Building bld = (Building) entity;
-                    
+
                     // 战术核验 1：这栋楼现在燃起来了吗？
                     if (bld.isOnFire()) {
                         // 战术核验 2：它是不是已经烧成一地黑灰了？（Fieryness 等于 4 就是彻底没救的废墟）
@@ -193,13 +193,13 @@ public class UESTCGoalDelegation extends FireTargetAllocator {
         Map<EntityID, EntityID> formulateBattlePlan(Set<EntityID> trucks, Set<EntityID> fires) {
             // 摊开一张崭新的排班表
             Map<EntityID, EntityID> battlePlan = new HashMap<>();
-            
+
             // 请出冷酷无情的价值评估师
             ValueAssessor assessor = new ValueAssessor();
 
             // 挨个点名排好队的消防车
             for (EntityID truckId : trucks) {
-                
+
                 // 默认这辆车还没找到目标
                 EntityID bestFireTarget = null;
                 // 记录这辆车目前遇到的最高得分（默认设为一个极小的负数兜底）
@@ -207,10 +207,10 @@ public class UESTCGoalDelegation extends FireTargetAllocator {
 
                 // 针对这辆特定的车，拉出所有的火场，挨个让它挑
                 for (EntityID fireId : fires) {
-                    
+
                     // 评估师按计算器：算算这辆车跑去灭这个火，能拿多少性价比分？
                     double currentScore = assessor.evaluateTargetScore(truckId, fireId);
-                    
+
                     // 打擂台！如果这个火场的得分，比之前见过的所有火场都要高！
                     if (currentScore > highestPriorityScore) {
                         // 刷新最高分记录
@@ -243,10 +243,10 @@ public class UESTCGoalDelegation extends FireTargetAllocator {
          * 物理意义：分数越高，代表这栋楼越急迫，越值得这辆车跑过去救。
          */
         double evaluateTargetScore(EntityID truckId, EntityID buildingId) {
-            
+
             // 1. 物理距离阻力：拉起皮尺，量出车和火场之间的真实物理距离
             double distance = worldInfo.getDistance(truckId, buildingId);
-            
+
             // 物理防线：如果车刚好就停在火场里面（距离为0），为了防止除数为0导致宇宙爆炸，强行设为1毫米
             if (distance <= 0) {
                 distance = 1.0;
@@ -256,7 +256,7 @@ public class UESTCGoalDelegation extends FireTargetAllocator {
             Building bld = (Building) worldInfo.getEntity(buildingId);
             // 看看它烧到几级了？（1冒烟，2小火，3大火）
             int fieryness = bld.isFierynessDefined() ? bld.getFieryness() : 1;
-            
+
             // 3. 楼宇体积乘数：越大的楼越值钱，不能让大商场被烧了去救小茅房
             int buildingArea = bld.isGroundAreaDefined() ? bld.getGroundArea() : 100;
 

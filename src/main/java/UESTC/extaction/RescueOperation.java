@@ -55,7 +55,7 @@ public class RescueOperation extends ExtAction {
     public RescueOperation(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager mm, DevelopData dd) {
         super(ai, wi, si, mm, dd);
         this.assignedMissionObjective = null;
-        
+
         // 领走伤情警戒线指标
         this.criticalBloodLossThreshold = dd.getInteger("ActionFireRescue.rest", 100);
         // 领走导航仪
@@ -72,18 +72,18 @@ public class RescueOperation extends ExtAction {
      */
     private EntityID transformTargetToSafeGround(EntityID rawObjectiveId) {
         StandardEntity inspectedEntity = this.worldInfo.getEntity(rawObjectiveId);
-        
+
         // 目标蒸发了
         if (inspectedEntity == null) {
             return null;
         }
-        
+
         // 1. 如果目标是个人，把他踩着的地板抽出来
         boolean isHumanTarget = inspectedEntity instanceof Human;
         if (isHumanTarget) {
             Human victimBody = (Human) inspectedEntity;
             boolean hasPosition = victimBody.isPositionDefined();
-            
+
             if (hasPosition) {
                 EntityID floorId = victimBody.getPosition();
                 boolean isFloorSafe = this.worldInfo.getEntity(floorId) instanceof Area;
@@ -91,21 +91,21 @@ public class RescueOperation extends ExtAction {
                     return floorId;
                 }
             }
-        } 
+        }
         // 2. 如果目标本来就是一块空地，完美
         else if (inspectedEntity instanceof Area) {
             return rawObjectiveId;
-        } 
+        }
         // 3. 如果目标是块拦路石，把它压着的马路抽出来
         else if (inspectedEntity.getStandardURN() == BLOCKADE) {
             Blockade giantRock = (Blockade) inspectedEntity;
             boolean isRockLocated = giantRock.isPositionDefined();
-            
+
             if (isRockLocated) {
                 return giantRock.getPosition();
             }
         }
-        
+
         return null;
     }
 
@@ -116,18 +116,18 @@ public class RescueOperation extends ExtAction {
     private boolean isLethalThreatApproaching(Human myBody) {
         int currentHealthPoints = myBody.getHP();
         int currentBleedingRate = myBody.getDamage();
-        
+
         // 满血，无须慌张
         boolean isHealthy = (currentHealthPoints == 0 || currentBleedingRate == 0);
         if (isHealthy) {
             return false;
         }
-        
+
         // 寿命估算：血量 / 流血速度
         int estimatedSecondsLeft = (currentHealthPoints / currentBleedingRate);
         int extraSecond = ((currentHealthPoints % currentBleedingRate) != 0 ? 1 : 0);
         int totalSurvivalChronicle = estimatedSecondsLeft + extraSecond;
-        
+
         // 确认世界末日时间
         if (this.apocalypticTimeLimit == -1) {
             try {
@@ -136,11 +136,11 @@ public class RescueOperation extends ExtAction {
                 this.apocalypticTimeLimit = -1;
             }
         }
-        
+
         // 宣判：1. 大动脉出血超标；2. 剩下的寿命等不到世界末日了
         boolean isBleedingTooFast = currentBleedingRate >= this.criticalBloodLossThreshold;
         boolean willDieBeforeEnd = (totalSurvivalChronicle + this.agentInfo.getTime()) < this.apocalypticTimeLimit;
-        
+
         return isBleedingTooFast || willDieBeforeEnd;
     }
 
@@ -150,31 +150,31 @@ public class RescueOperation extends ExtAction {
      */
     private Action executeTacticalRescueOperation(FireBrigade myTruck, PathPlanning navigator, EntityID objectiveId) {
         StandardEntity objectiveEntity = this.worldInfo.getEntity(objectiveId);
-        
+
         if (objectiveEntity == null) {
             return null;
         }
-        
+
         EntityID myGpsLocation = myTruck.getPosition();
-        
+
         // --- 战术分支 A：目标是人类 ---
         boolean isTargetHuman = objectiveEntity instanceof Human;
         if (isTargetHuman) {
             Human EntrappedStateVictim = (Human) objectiveEntity;
-            
+
             boolean isLocationUnknown = !EntrappedStateVictim.isPositionDefined();
             boolean isAlreadyDead = (EntrappedStateVictim.isHPDefined() && EntrappedStateVictim.getHP() == 0);
-            
+
             // 查无此人，或者已是尸体一具，直接放弃
             if (isLocationUnknown || isAlreadyDead) {
                 return null;
             }
-            
+
             EntityID victimGpsLocation = EntrappedStateVictim.getPosition();
-            
+
             // 物理距离鉴定：我跟他站在同一块地板上了吗？
             boolean isStandingTogether = (myGpsLocation.getValue() == victimGpsLocation.getValue());
-            
+
             if (isStandingTogether) {
                 // 如果人就在脚下，看他身上有没有压着石头
                 boolean isCrushedByRubble = EntrappedStateVictim.isBuriednessDefined() && EntrappedStateVictim.getBuriedness() > 0;
@@ -184,7 +184,7 @@ public class RescueOperation extends ExtAction {
             } else {
                 // 人在远处，命令导航仪规划路线
                 List<EntityID> routeToVictim = navigator.getResult(myGpsLocation, victimGpsLocation);
-                
+
                 boolean isRouteValid = (routeToVictim != null);
                 if (isRouteValid) {
                     boolean hasSteps = (routeToVictim.size() > 0);
@@ -195,7 +195,7 @@ public class RescueOperation extends ExtAction {
             }
             return null;
         }
-        
+
         // --- 战术分支 B：目标是拦路石 ---
         boolean isTargetBlockade = (objectiveEntity.getStandardURN() == BLOCKADE);
         if (isTargetBlockade) {
@@ -205,12 +205,12 @@ public class RescueOperation extends ExtAction {
                 objectiveEntity = this.worldInfo.getEntity(giantRubble.getPosition());
             }
         }
-        
+
         // --- 战术分支 C：目标是空地 ---
         boolean isTargetArea = objectiveEntity instanceof Area;
         if (isTargetArea) {
             List<EntityID> routeToArea = navigator.getResult(myGpsLocation, objectiveEntity.getID());
-            
+
             boolean isRouteValid = (routeToArea != null);
             if (isRouteValid) {
                 boolean hasSteps = (routeToArea.size() > 0);
@@ -219,7 +219,7 @@ public class RescueOperation extends ExtAction {
                 }
             }
         }
-        
+
         return null;
     }
 
@@ -233,11 +233,11 @@ public class RescueOperation extends ExtAction {
     @Override
     public ExtAction setTarget(EntityID targetId) {
         this.assignedMissionObjective = null;
-        
+
         if (targetId != null) {
             StandardEntity entity = this.worldInfo.getEntity(targetId);
             boolean isValidTarget = (entity instanceof Human) || (entity instanceof Area);
-            
+
             if (isValidTarget) {
                 this.assignedMissionObjective = targetId;
                 return this;
@@ -256,11 +256,11 @@ public class RescueOperation extends ExtAction {
 
         // 生存危机判定
         boolean isDying = this.isLethalThreatApproaching(mySelfTruck);
-        
+
         if (isDying) {
             // 如果快死了，把目标转化为一个安全区
             EntityID safeRefugeArea = this.transformTargetToSafeGround(this.assignedMissionObjective);
-            
+
             boolean isSafeZoneFound = (safeRefugeArea != null);
             if (isSafeZoneFound) {
                 // 逃命机动！
@@ -270,7 +270,7 @@ public class RescueOperation extends ExtAction {
             // 健康状态，全力执行营救任务！
             this.result = this.executeTacticalRescueOperation(mySelfTruck, this.tacticalChassisNavigator, this.assignedMissionObjective);
         }
-        
+
         return this;
     }
 
@@ -292,7 +292,7 @@ public class RescueOperation extends ExtAction {
     @Override
     public ExtAction preparate() {
         super.preparate();
-        int prepCount = this.getCountPreparate(); 
+        int prepCount = this.getCountPreparate();
         if (prepCount >= 2) {
             return this;
         }

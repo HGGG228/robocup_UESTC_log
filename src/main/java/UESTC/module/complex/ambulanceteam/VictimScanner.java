@@ -31,7 +31,7 @@ public class VictimScanner extends HumanDetector {
   private Clustering clusterer;          // 聚类算法（用于区域分配）
   private Clustering stuckedHumans;      // 被困人员聚类
   private CitizenCommProtocol civMessages;  // 平民消息处理模块
-  
+
   private EntityID result = null;        // 最终计算出的目标ID
   private Set<EntityID> cluster = new HashSet<>(); // 当前智能体所属的分区/簇内的实体ID
 

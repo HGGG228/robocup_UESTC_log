@@ -57,7 +57,7 @@ public class RouteFinder extends PathPlanning {
         public Collection<HeuristicSearchBase.HeuristicNode> gatherNeighbors() {
             // 依据实体标识符从环境模型中提取具体的面状物理区域实体。
             Area areaEntity = (Area) worldInfo.getEntity(this.getID());
-            
+
             // 获取当前区域的所有邻接标识集，并转化为数据流以便执行链式操作。
             return areaEntity.getNeighbours().stream()
                     // 遍历邻接标识符，利用节点构建方法将其转化为启发式评估节点。
@@ -175,7 +175,7 @@ public class RouteFinder extends PathPlanning {
             return false;
         }
         // 采用双向核查机制，验证给定的出入偶对是否命中了受阻黑名单记录。
-        return invalidSet.contains(new DataPair<>(nodeFrom, nodeTo)) || 
+        return invalidSet.contains(new DataPair<>(nodeFrom, nodeTo)) ||
                invalidSet.contains(new DataPair<>(nodeTo, nodeFrom));
     }
 
@@ -197,7 +197,7 @@ public class RouteFinder extends PathPlanning {
         double physicalDist = this.worldInfo.getDistance(targetId, ancestorNode.getID());
         // 结合路权优先级判定结果，动态赋予干线路段与普通街区的地形阻力乘数。
         double terrainWeight = this.isPriorityRoute(ancestorNode.getID()) ? 1.0 : 3.0;
-        
+
         // 执行基础代价核算，合并物理距离与地形阻力因子推导出初始阶段消耗值。
         double finalCost = physicalDist * terrainWeight;
 

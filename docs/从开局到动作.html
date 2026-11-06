@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>智能体：从拿到地图到第一个动作</title>
+<style>
+  :root{
+    --bg:#0e131d; --panel:#18202e; --panel2:#1e2838; --line:#2b3648;
+    --fg:#e8eef7; --dim:#94a3b8; --srv:#38bdf8; --agt:#f59e0b;
+    --ok:#10b981; --warn:#f43f5e; --code:#0b1017; --hide:#c084fc;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:30px 26px 60px;background:var(--bg);color:var(--fg);
+    font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;line-height:1.62}
+  h1{font-size:23px;margin:0 0 6px}
+  .sub{color:var(--dim);font-size:13.5px;margin:0 0 26px}
+  code{font-family:Consolas,"Cascadia Mono",monospace;font-size:12.5px;color:#9fe6c8}
+  .step{display:flex;gap:14px;margin-bottom:10px}
+  .num{flex:0 0 40px;height:40px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-weight:700;font-size:15px;color:#0e131d}
+  .srv .num{background:var(--srv)} .agt .num{background:var(--agt)}
+  .body{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:12px 15px}
+  .body h3{margin:0 0 4px;font-size:14.5px}
+  .body .who{font-size:11px;letter-spacing:.5px;color:var(--dim);margin-bottom:7px}
+  .srv .body h3{color:#7dd3fc} .agt .body h3{color:#fcd34d}
+  ul{margin:6px 0 0;padding-left:19px}
+  li{font-size:12.8px;color:#c3cddb;margin:3px 0}
+  li b{color:#e8eef7;font-weight:600}
+  .pill{display:inline-block;font-size:10.5px;padding:1px 8px;border-radius:99px;
+    margin-right:5px;border:1px solid;vertical-align:1px}
+  .p-give{color:#6ee7b7;border-color:#1d6b53}
+  .p-hide{color:var(--hide);border-color:#5b3d8f}
+  .p-none{color:#fda4af;border-color:#5b2130}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:6px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .card h3{margin:0 0 6px;font-size:13.5px}
+  .card p{margin:0 0 6px;font-size:12.5px;color:#c3cddb}
+  .card p:last-child{margin-bottom:0}
+  .bad{border-color:#5b2130} .bad h3{color:#fda4af}
+  .sec{margin:32px 0 12px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px}
+  .sec::after{content:"";flex:1;height:1px;background:var(--line)}
+  .loopbox{border:1px dashed #8a6316;border-radius:12px;padding:14px;background:#161d29}
+  .loopbox > .lbl{font-size:12px;color:#fcd34d;margin-bottom:10px;letter-spacing:.5px}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+    margin:7px 0 0;overflow-x:auto;color:#9fe6c8;font-size:12px;line-height:1.55}
+  .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-top:8px}
+  .kv div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:12.5px}
+  .kv span{display:block;font-size:10.5px;color:var(--dim);margin-bottom:2px}
+  .foot{margin-top:32px;padding-top:14px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+</style>
+</head>
+<body>
+
+<h1>智能体：从拿到地图到第一个动作</h1>
+<p class="sub">左边蓝色是服务器做的事，右边黄色是智能体做的事。开局只有一次，第 6 步开始每回合循环。</p>
+
+<div class="step srv">
+  <div class="num">1</div>
+  <div class="body">
+    <div class="who">服务器 · 建立连接</div>
+    <h3>分配单位，发"开局大礼包"</h3>
+    <ul>
+      <li>智能体发 <code>AKConnect</code>（队名 + 想控制的兵种类型）</li>
+      <li>服务器找到空闲单位，回 <code>KAConnectOK</code>，里面装三样东西：<b>你的实体 ID</b>、<b>初始可见实体集合</b>、<b>一份裁剪过的配置</b></li>
+      <li>连接窗口有 5 分钟（<code>kernel.startup.connect-time</code>）</li>
+    </ul>
+  </div>
+</div>
+
+<div class="step srv">
+  <div class="num">2</div>
+  <div class="body">
+    <div class="who">服务器 · 这一步决定"你能看到什么"</div>
+    <h3>开局地图 = 全图静态骨架，但关键信息被抠掉</h3>
+    <ul>
+      <li><span class="pill p-give">给</span><b>全部道路</b>：节点坐标、长度、邻接关系、轮廓顶点</li>
+      <li><span class="pill p-give">给</span><b>全部建筑</b>：坐标、形状、面积、邻接</li>
+      <li><span class="pill p-give">给</span><b>全部队友单位</b>：只给 X、Y、所在位置</li>
+      <li><span class="pill p-hide">藏</span>道路上的<b>路障</b>；建筑的<b>着火、温度、烧毁度、破损度</b></li>
+      <li><span class="pill p-hide">藏</span>其他单位的 HP、伤害、被埋深度、体力</li>
+      <li><span class="pill p-none">不给</span><b>平民一个都不给</b>，只能靠后面自己看到</li>
+      <li>配置也只给白名单：思考时间、电台参数、水罐容量、灭火射程与上限、清障速率、感知精度、各兵种数量。<b>地图文件本身不给</b></li>
+    </ul>
+  </div>
+</div>
+
+<div class="step agt">
+  <div class="num">3</div>
+  <div class="body">
+    <div class="who">智能体 · 组装自己</div>
+    <h3>照装配单把模块全部造出来</h3>
+    <ul>
+      <li>读 <code>config/module.cfg</code>，按"我是什么兵种"挑出对应的 <code>DefaultTacticsXxx.*</code> 槽位</li>
+      <li>每个模块的构造函数在这一步跑：用 <code>mm.getModule("槽位名")</code> 把依赖的兄弟模块挂进来</li>
+      <li>这一步只做接线，不算任何东西</li>
+    </ul>
+  </div>
+</div>
+
+<div class="step agt">
+  <div class="num">4</div>
+  <div class="body">
+    <div class="who">智能体 · 开电台</div>
+    <h3>订阅频道，然后才能"听见"别人</h3>
+    <ul>
+      <li>发 <code>AKSubscribe(频道号列表)</code>。每个兵种能订阅几个是写死的：小队 2 个、指挥中心 2 个（本图配置）</li>
+      <li>想订阅的频道数超过上限 → 服务器只写一行警告，<b>直接不处理，智能体那边毫无反馈</b>。这是"明明写了通信却静默失灵"的最常见原因</li>
+      <li>注意：<b>说话不需要订阅，听才需要</b></li>
+    </ul>
+  </div>
+</div>
+
+<div class="step agt">
+  <div class="num">5</div>
+  <div class="body">
+    <div class="who">智能体 · 开局就一次</div>
+    <h3>建好"整张图都不会再变"的那份底稿</h3>
+    <ul>
+      <li>赛前预计算模式：<code>precompute(pd)</code> 算完写盘存档</li>
+      <li>正式比赛：有存档走 <code>resume(pd)</code> 读盘；没存档走 <code>preparate()</code> 现场算</li>
+      <li>典型内容：分区、建筑邻接表、干线路网、拥堵热点</li>
+    </ul>
+  </div>
+</div>
+
+<div class="sec">每回合循环</div>
+<div class="loopbox">
+  <div class="lbl">一回合 = 1 秒（kernel.agents.think-time），本图共 270 回合</div>
+
+  <div class="step srv">
+    <div class="num">6</div>
+    <div class="body">
+      <div class="who">服务器</div>
+      <h3>先算感知，再等命令</h3>
+      <ul>
+        <li>时间 +1，先用<b>上一回合</b>收到的消息跑一遍电台 → <b>消息天然延迟 1 回合</b></li>
+        <li>对每个智能体做视线感知（射线打出去，被建筑挡住就看不到），算出<b>这一回合的变化集</b></li>
+        <li>把「时间 + 变化集 + 听到的消息」打包成 <code>KASense</code> 发出去</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step agt">
+    <div class="num">7</div>
+    <div class="body">
+      <div class="who">智能体</div>
+      <h3>收、更新、算、回一个命令</h3>
+      <ul>
+        <li><code>KASense</code> 被拆成两半：<b>变化集</b>进世界模型，<b>消息</b>进信箱</li>
+        <li><code>updateInfo()</code>：读变化集、读信箱，更新内部状态</li>
+        <li><code>calc()</code>：算这一回合该干什么，结论挂在模块自己身上</li>
+        <li>战术层来取：<code>getTarget()</code> / <code>getResult()</code> / <code>getAction()</code></li>
+        <li>翻成动作命令发回服务器：<code>AKMove / AKRescue / AKExtinguish / AKClear / AKLoad / AKUnload / AKRest</code></li>
+        <li><b>一个单位一回合只能发一个动作命令</b>，发两个第二个直接被丢掉</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step srv">
+    <div class="num">8</div>
+    <div class="body">
+      <div class="who">服务器</div>
+      <h3>过滤 → 执行 → 合并 → 算分</h3>
+      <ul>
+        <li>过滤：时间不对的、被冻住的、死了的、被埋的、重复发命令的，全部丢掉</li>
+        <li>交给各模拟器执行（交通、倒塌、火灾、清障）</li>
+        <li>结果合并回世界模型，更新比分，进入下一回合</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="sec">三个兵种的实际决策链</div>
+<div class="grid">
+  <div class="card">
+    <h3 style="color:#fda4af">消防队</h3>
+    <p><code>BrigadeScout</code> 找目标 → <code>BrigadeNavigator</code> 导航 → <code>RescueOperation</code> 挖人 → <code>TacticalDisplacement</code> 移动</p>
+  </div>
+  <div class="card">
+    <h3 style="color:#7dd3fc">警察</h3>
+    <p><code>RiotSquadScout</code> 找路障 → <code>RiotSquadRouter</code> 导航 → <code>UESTCRouteSanitization</code> 清障</p>
+  </div>
+  <div class="card">
+    <h3 style="color:#6ee7b7">医疗</h3>
+    <p><code>SampleHumanDetector</code> 找伤员 → <code>UESTCReconnaissance</code> 侦察 → <code>MedevacTransport</code> 搬运</p>
+  </div>
+</div>
+
+<div class="sec">记住这几个数（kobe 这张图）</div>
+<div class="kv">
+  <div><span>视线距离</span>30000 mm</div>
+  <div><span>视线射线</span>72 条</div>
+  <div><span>HP 可见精度</span>1000</div>
+  <div><span>伤害可见精度</span>50</div>
+  <div><span>每回合思考时间</span>1000 ms</div>
+  <div><span>总回合数</span>270</div>
+  <div><span>开局命令被忽略</span>前 3 回合</div>
+  <div><span>电台</span>0=语音 / 1=无线电</div>
+</div>
+
+<div class="sec">四个必须讲清楚的坑</div>
+<div class="grid">
+  <div class="card bad">
+    <h3>信息不是"看到"而是"变了"</h3>
+    <p>给的是变化集，不是全量快照。要维持"我知道什么"，模块必须自己攒记忆，不然下一步就忘了。</p>
+  </div>
+  <div class="card bad">
+    <h3>看不到就等于不存在</h3>
+    <p>平民开局一个都不给，路障和火也被藏起来。代码里直接假设"某建筑没着火"是危险的。</p>
+  </div>
+  <div class="card bad">
+    <h3>电台订阅超限是静默失败</h3>
+    <p>服务器只写日志，智能体完全不知道。通信相关的 bug 优先查这里。</p>
+  </div>
+  <div class="card bad">
+    <h3>消息慢一回合</h3>
+    <p>服务器先发感知、再收命令，所以这一回合发的消息，队友下一回合才收到。依赖实时协同的算法要考虑到。</p>
+  </div>
+</div>
+
+<div class="foot">
+  服务器侧依据：<code>kernel/ComponentManager.java</code>、<code>kernel/Kernel.java</code>、<code>standard/kernel/StandardAgentRegistrar.java</code>、<code>standard/kernel/LineOfSightPerception.java</code>。
+  智能体侧依据：<code>config/module.cfg</code> 及各模块的 <code>updateInfo</code> / <code>calc</code>。
+</div>
+
+</body>
+</html>

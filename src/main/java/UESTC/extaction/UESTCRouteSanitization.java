@@ -36,7 +36,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     // ========================================================================
     // [环境感知雷达与内存状态缓存]
     // ========================================================================
-    
+
     // 当前指令锁定的最终突破区域目标
     protected EntityID target;
     // 动作指令内存缓存池，避免同一物理帧重复演算耗尽算力
@@ -56,7 +56,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
 
     // 挂载用于可视化调试战术轨迹的渲染器
     DebugUtil debug;
-    
+
     // 载具车体碰撞箱的物理半径常量 (500毫米/单位)
     private static final double AGENT_RADIUS = 500.0;
     // 载具车体强制进入大修维护的结构损伤临界值
@@ -71,7 +71,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         this.failedMove = mm.getModule("UESTC.PF.ExtActionClear.FailedMove");
         this.pathPlanner = mm.getModule("UESTC.PF.ExtActionClear.PathPlanning");
         this.stuckedHumans = mm.getModule("UESTC.PF.ExtActionClear.StuckHumans");
-        
+
         // 分配内存给调试输出接口
         this.debug = new DebugUtil(this.agentInfo, this.worldInfo, this.scenarioInfo);
     }
@@ -138,11 +138,11 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         // 复合逻辑打散：侦测路径阻断现象并更新逃生标志位
         boolean isPathBlocked = this.cannotReach();
         this.needToEscape = isPathBlocked;
-        
+
         // 复合逻辑打散：侦测自身是否陷入包围圈，并以 AND 逻辑累加至破障标志位
         boolean isEntrappedStateInRubble = this.isStucked();
         this.needToShrink = this.needToShrink && isEntrappedStateInRubble; // 严格等价于 &=
-        
+
         return this;
     }
 
@@ -150,7 +150,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     public ExtAction setTarget(EntityID id) {
         // 将目标转化至世界实体对象并缓存
         StandardEntity targetCandidate = this.worldInfo.getEntity(id);
-        
+
         // 如果给定的指令是清除一个具体的石块/路障对象
         boolean isBlockadeTarget = (targetCandidate instanceof Blockade);
         if (isBlockadeTarget) {
@@ -175,10 +175,10 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     public ExtAction calc() {
         // 重置动作分发器的输出口
         this.result = null;
-        
+
         // 提取系统底层运行滴答时钟
         int systemTime = this.agentInfo.getTime();
-        
+
         // 卫语句：雷达无锁定目标时挂起履带
         boolean noTargetAssigned = (this.target == null);
         if (noTargetAssigned) {
@@ -191,7 +191,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
             // 直接读取历史计算轨迹
             Action cachedMove = this.cache.get(this.target);
             this.result = cachedMove;
-            
+
             // 拼接追踪字符串并呼叫调试器渲染动作包络线
             String debugLabel = this.target.toString() + ", 1";
             this.debug.showAction(this.result, systemTime, debugLabel);
@@ -200,7 +200,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
 
         // 获取车体当前所在的绝对网格基准点
         final EntityID currentBasePosition = this.agentInfo.getPosition();
-        
+
         // === 严格遵守原版优先级链路 ===
 
         // 优先级一：如果判断车辆严重陷入碎片网，开启原地绞杀清理模式
@@ -224,7 +224,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         if (isInKernelProtect) {
             return this;
         }
-        
+
         // 优先级四：载具生命探测。如果引擎即将报废或漏油严重
         boolean isCriticallyDamaged = this.needRest();
         if (isCriticallyDamaged) {
@@ -236,7 +236,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
                 this.target = safeRefuge;
             }
         }
-        
+
         // 二次卫语句拦截：如果避难所也没找到且原目标也空，停止行动
         if (this.target == null) return this;
 
@@ -248,7 +248,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         this.pathPlanner.setDestination(this.target);
         // 激活A*宏观网络计算
         this.pathPlanner.calc();
-        
+
         // 获取原始跨区域骨干网，并清洗头节点规范化
         List<EntityID> rawPath = this.pathPlanner.getResult();
         final List<EntityID> normalizedPath = this.normalize(rawPath);
@@ -257,23 +257,23 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         GeometryCuttingEngine geometryCore = new GeometryCuttingEngine();
         // 将粗糙的 Area 节点网转化为物理线段序列集合
         Map<EntityID, List<Line2D>> collisionSegmentsMap = geometryCore.makeConcretePath(normalizedPath);
-        
+
         // 补洞策略：扫描途经每一个网格，为其补充针对受困人群的安全切割线
         for (EntityID pathNodeId : normalizedPath) {
             List<Line2D> concreteLines = collisionSegmentsMap.get(pathNodeId);
-            
+
             // 将原版的短路判断解构为详细判定
             boolean isListNull = (concreteLines == null);
             boolean isListEmpty = false;
             if (!isListNull) {
                 isListEmpty = concreteLines.isEmpty();
             }
-            
+
             // 如果某区域没有生成可用物理引导线
             if (isListNull || isListEmpty) {
                 // 派生出针对该网格平民防误伤的辅助补给线
                 final List<Line2D> crowdAvoidanceLines = geometryCore.seekConcretePathToStuckedHumans(pathNodeId, concreteLines);
-                
+
                 if (isListNull) {
                     collisionSegmentsMap.put(pathNodeId, crowdAvoidanceLines);
                 } else {
@@ -290,7 +290,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
             final List<Line2D> drivingLines = collisionSegmentsMap.get(stepId);
             // 将引导线段打入掩膜系统，寻找交界处那条需要电锯切开的障碍前沿线
             final Line2D obstacleFrontierLine = geometryCore.seekClearline(stepId, drivingLines);
-            
+
             // 如果撞击线确实存在，说明路被封死了
             boolean hitWall = (obstacleFrontierLine != null);
             if (hitWall) {
@@ -305,13 +305,13 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         // 畅通无阻：如果整个多边形推演未检测到任何石块阻击，挂挡全速前进
         Action driveAction = this.makeActionToMove(normalizedPath);
         this.result = driveAction;
-        
+
         // 最后一道保险：如果位移指令组装失败（如路径少于2），尝试盲打方向盘脱困
         boolean driveFailed = (this.result == null);
         if (driveFailed) {
             this.result = this.makeActionToAvoidError();
         }
-        
+
         // 写入最终指令缓冲池
         this.cache.put(this.target, this.result);
         return this;
@@ -335,7 +335,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         final PoliceForce myBody = (PoliceForce) this.agentInfo.me();
         final int health = myBody.getHP();
         final int traumaRate = myBody.getDamage();
-        
+
         // 免疫或完好无损检查
         boolean isImmortal = (health == 0);
         boolean isSafe = (traumaRate == 0);
@@ -345,18 +345,18 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
 
         // 提取系统进程指标
         final int currentTick = this.agentInfo.getTime();
-        
+
         // 浮点数进位计算法：推导机体还能挺几个物理回合
         double lifeRatio = (double) health / traumaRate;
         final int expectedSurvivalChronicle = (int) Math.ceil(lifeRatio);
-        
+
         // 灾难预设的总推演长度底线
         final int apocalypseEnd = 300;
 
         // 复合逻辑展开：流血过快（单次超限），或预期大限将至
         boolean traumaExcessive = (traumaRate >= DAMAGE_NEEDED_REST);
         boolean willNotSurvive = ((currentTick + expectedSurvivalChronicle) < apocalypseEnd);
-        
+
         return traumaExcessive || willNotSurvive;
     }
 
@@ -369,12 +369,12 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
 
         // 搜罗图谱中所有官方挂牌的坚固防空洞
         Collection<EntityID> allRefuges = this.worldInfo.getEntityIDsOfType(REFUGE);
-        
+
         for (EntityID bunkerOption : allRefuges) {
             // 将长串加法解构成多段计算
             double distanceFromMeToBunker = this.worldInfo.getDistance(selfId, bunkerOption);
             double distanceFromBunkerToTarget = this.worldInfo.getDistance(bunkerOption, this.target);
-            
+
             // 综合耗损 = 求生代价 + 日后复出前往战场的代价
             double totalTacticalCost = distanceFromMeToBunker + distanceFromBunkerToTarget;
 
@@ -390,16 +390,16 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     private List<EntityID> normalize(List<EntityID> path) {
         // 建立可变路由表副本
         List<EntityID> normalizedList = new ArrayList<>(path);
-        
+
         // 校验路线原点是否贴合履带当下坐标
         final EntityID currentBase = this.agentInfo.getPosition();
-        
+
         boolean isEmptyPath = normalizedList.isEmpty();
         boolean originMismatch = false;
         if (!isEmptyPath) {
             originMismatch = !normalizedList.get(0).equals(currentBase);
         }
-        
+
         // 修正脱节路网：向表头强行拼入脚下坐标
         if (isEmptyPath || originMismatch) {
             normalizedList.add(0, currentBase);
@@ -410,29 +410,29 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     // ========================================================================
     // [高精度几何切割核心 (Precision Geometry Core)]
     // ========================================================================
-    
+
     private class GeometryCuttingEngine {
 
         Map<EntityID, List<Line2D>> makeConcretePath(List<EntityID> path) {
             // 获取路径的深渊终端
             final int nodeCount = path.size();
             EntityID terminalId = path.get(nodeCount - 1);
-            
+
             // 将终端区划解构为具有物理重心的平面
             final Area terminalZone = (Area) worldInfo.getEntity(terminalId);
             final Point2D terminalCentroid = getPoint(terminalZone);
-            
+
             // 路由重载至重载函数
             return this.makeConcretePath(path, terminalCentroid);
         }
-        
+
         private Map<EntityID, List<Line2D>> makeConcretePath(List<EntityID> path, Point2D dest) {
             Map<EntityID, List<Line2D>> pathMapOutput = new HashMap<>();
-            
+
             final int count = path.size();
             final EntityID originId = path.get(0);
             final EntityID goalId = path.get(count - 1);
-        
+
             // 针对极短瞬移路线进行特殊处理
             if (count == 1) {
                 final List<Line2D> tinySegment = this.makeConcretePath(originId, getPoint(), dest);
@@ -440,57 +440,57 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
                 pathMapOutput.put(originId, processedCut);
                 return pathMapOutput;
             }
-        
+
             // 中段常规地带拓扑抽离
             for (int index = 1; index < count - 1; ++index) {
                 final EntityID centerId = path.get(index);
                 final EntityID backwardId = path.get(index - 1);
                 final EntityID forwardId = path.get(index + 1);
-                
+
                 final List<Line2D> rawMidLines = this.makeConcretePath(centerId, backwardId, forwardId);
                 List<Line2D> sawedMidLines = this.cut(rawMidLines);
                 pathMapOutput.put(centerId, sawedMidLines);
             }
-            
+
             // 处理首发网格脱出线
             EntityID secondNode = path.get(1);
             List<Line2D> originLines = this.makeConcretePath(originId, getPoint(), secondNode);
             pathMapOutput.put(originId, this.cut(originLines));
-        
+
             // 处理终末网格刺入线
             EntityID penultimateNode = path.get(count - 2);
             List<Line2D> goalLines = this.makeConcretePath(goalId, penultimateNode, dest);
             pathMapOutput.put(goalId, this.cut(goalLines));
-        
+
             return pathMapOutput;
         }
-        
+
         private List<Line2D> makeConcretePath(EntityID id, EntityID prev, EntityID next) {
             final Area gridZone = (Area) worldInfo.getEntity(id);
             if (gridZone == null) throw new IllegalArgumentException("Grid entity void for ID: " + id);
-            
+
             // 获取后门与前门的边界接缝
             final Edge entryEdge = gridZone.getEdgeTo(prev);
             final Edge exitEdge = gridZone.getEdgeTo(next);
             if (entryEdge == null || exitEdge == null) throw new IllegalArgumentException("Topological breach: missing doors.");
-            
+
             final Point2D coreCenter = getPoint(gridZone);
-        
+
             // 连接：入口中点 -> 核心中点 -> 出口中点
             List<Line2D> vectorList = new ArrayList<>(2);
             Point2D entryMid = this.computeMiddlePoint(entryEdge.getLine());
             Point2D exitMid = this.computeMiddlePoint(exitEdge.getLine());
-            
+
             vectorList.add(new Line2D(entryMid, coreCenter));
             vectorList.add(new Line2D(coreCenter, exitMid));
             return vectorList;
         }
-        
+
         private List<Line2D> makeConcretePath(EntityID id, Point2D from, Point2D dest) {
             final Area blockZone = (Area) worldInfo.getEntity(id);
             if (blockZone == null) throw new IllegalArgumentException("Block void ID: " + id);
             final Point2D balanceCenter = getPoint(blockZone);
-        
+
             List<Line2D> traceSegments = new LinkedList<>();
             traceSegments.add(new Line2D(from, balanceCenter));
             // 向所有缝隙散发连线
@@ -498,22 +498,22 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
             traceSegments.addAll(neighborsTrace);
             return traceSegments;
         }
-        
+
         private List<Line2D> makeConcretePath(EntityID id, Point2D from, EntityID next) {
             final Area sector = (Area) worldInfo.getEntity(id);
             if (sector == null) throw new IllegalArgumentException("Sector null: " + id);
-            
+
             final Point2D focusPoint = getPoint(sector);
             final Edge nextDoor = sector.getEdgeTo(next);
             if (nextDoor == null) throw new IllegalArgumentException("No hatch to: " + next);
-            
+
             final Point2D doorMid = this.computeMiddlePoint(nextDoor.getLine());
             final Line2D traverseLine = new Line2D(focusPoint, doorMid);
-            
+
             // 投影法求最短接入点
             final Point2D shadowPoint = GeometryTools2D.getClosestPointOnSegment(traverseLine, from);
             List<Line2D> trajectory = new LinkedList<>();
-            
+
             boolean isShadowAtFocus = shadowPoint.equals(focusPoint);
             if (isShadowAtFocus) {
                 trajectory.add(new Line2D(from, focusPoint));
@@ -523,31 +523,31 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
             }
             return trajectory;
         }
-        
+
         private List<Line2D> makeConcretePath(EntityID id, EntityID prev, Point2D dest) {
             final Area chamber = (Area) worldInfo.getEntity(id);
             if (chamber == null) throw new IllegalArgumentException("Chamber missing: " + id);
-            
+
             final Point2D centerGravity = getPoint(chamber);
             final Edge backDoor = chamber.getEdgeTo(prev);
             if (backDoor == null) throw new IllegalArgumentException("No back hatch: " + prev);
-            
+
             final Point2D backMid = this.computeMiddlePoint(backDoor.getLine());
             List<Line2D> layout = new LinkedList<>();
             layout.add(new Line2D(backMid, centerGravity));
             layout.addAll(this.makeConcretePathToAllNeighbor(id, prev));
             return layout;
         }
-        
+
         // 彻底颠覆流派：将原版的 Java 8 Stream 处理解构为原始的 for 循环，大幅改变代码皮相
         private List<Line2D> makeConcretePathToAllNeighbor(EntityID id, EntityID ignored) {
             final Area precinct = (Area) worldInfo.getEntity(id);
             if (precinct == null) throw new IllegalArgumentException("Precinct void: " + id);
-        
+
             final Point2D focalCenter = getPoint(precinct);
             final List<Line2D> radialPaths = new LinkedList<>();
             final List<EntityID> neighboringBlocks = precinct.getNeighbours();
-            
+
             // 将流操作平铺开来
             for (EntityID neighborNode : neighboringBlocks) {
                 // 忽略过滤
@@ -555,13 +555,13 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
                 if (isIgnored) {
                     continue;
                 }
-                
+
                 Edge frontierEdge = precinct.getEdgeTo(neighborNode);
                 if (frontierEdge == null) {
                     System.err.println("No edge found between area and neighbor for ID: " + neighborNode);
                     continue; // 模拟 filter(Objects::nonNull)
                 }
-                
+
                 // 连线构建
                 Point2D edgeCenter = this.computeMiddlePoint(frontierEdge.getLine());
                 Line2D beam = new Line2D(focalCenter, edgeCenter);
@@ -569,93 +569,93 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
             }
             return radialPaths;
         }
-        
+
         // 将流式代码解构并展开局部变量
         List<Line2D> seekConcretePathToStuckedHumans(EntityID id, List<Line2D> others) {
             final List<Human> victimsList = this.seekStuckedHumansOn(id);
             List<Line2D> clearanceRays = new ArrayList<>();
-            
+
             for (Human victimObj : victimsList) {
                 Point2D victimPos = getPoint(victimObj);
                 Point2D myRigPos = getPoint();
                 int toolRange = scenarioInfo.getClearRepairDistance();
-                
+
                 // 构建射线发射角
                 Line2D aimingLine = new Line2D(myRigPos, victimPos);
                 Vector2D normalizedAim = aimingLine.getDirection().normalised();
                 // 射程截断拉伸
                 Vector2D extendedBlast = normalizedAim.scale(toolRange);
-                
+
                 Line2D clearanceRay = new Line2D(myRigPos, extendedBlast);
                 clearanceRays.add(clearanceRay);
             }
             // 返回切割后的工作段
             return this.cut(clearanceRays);
         }
-        
+
         private List<Human> seekStuckedHumansOn(EntityID id) {
             stuckedHumans.calc();
             List<Human> crowdResult = new ArrayList<>();
-        
+
             // 提取人群簇网格
             Collection<StandardEntity> clusterSet = stuckedHumans.getClusterEntities(0);
             for (StandardEntity entUnit : clusterSet) {
                 Human humanUnit = (Human) entUnit;
-                
+
                 // 并列条件拆散判定
                 boolean isNotPolice = (humanUnit.getStandardURN() != POLICE_FORCE);
                 boolean isNotCivilian = (humanUnit.getStandardURN() != CIVILIAN);
                 boolean isSameLocation = humanUnit.getPosition().equals(id);
-                
+
                 if (isNotPolice && isNotCivilian && isSameLocation) {
                     crowdResult.add(humanUnit);
                 }
             }
             return crowdResult;
         }
-        
+
         // 将流式切割逻辑粉碎为 explicit loop，外观发生剧烈改变
         private List<Line2D> cut(List<Line2D> lines) {
             List<Line2D> choppedSegments = new ArrayList<>();
-            
+
             for (Line2D originalBeam : lines) {
                 Vector2D beamVector = originalBeam.getDirection();
                 double beamLength = beamVector.getLength();
-                
+
                 // 电锯刀片工作跨距
                 double bladeSpan = scenarioInfo.getClearRepairDistance() * 0.3;
-                
+
                 // 计算切片数量，向上取整
                 double divisionCount = beamLength / bladeSpan;
                 int totalFragments = (int) Math.ceil(divisionCount);
-                
+
                 for (int segmentIdx = 0; segmentIdx < totalFragments; segmentIdx++) {
                     // 内插计算首尾比例
                     double startRatio = (bladeSpan * segmentIdx) / beamLength;
                     double rawEndRatio = (bladeSpan * (segmentIdx + 1)) / beamLength;
                     double endRatio = Math.min(rawEndRatio, 1.0);
-                    
+
                     Point2D cutStart = originalBeam.getPoint(startRatio);
                     Point2D cutEnd = originalBeam.getPoint(endRatio);
-                    
+
                     choppedSegments.add(new Line2D(cutStart, cutEnd));
                 }
             }
             return choppedSegments;
         }
-        
+
         // 视线防挡墙碰撞测试仪：解构原版的 Reduce 融合函数
         Line2D seekClearline(EntityID id, List<Line2D> concrete) {
             final Area groundArea = (Area) worldInfo.getEntity(id);
             if (groundArea == null) throw new IllegalArgumentException("Ground Area missed: " + id);
-            
+
             // 是否存在残骸碎片报告
             boolean hasDebrisInfo = groundArea.isBlockadesDefined();
             if (!hasDebrisInfo) return null;
-        
+
             final List<EntityID> debrisIds = groundArea.getBlockades();
             if (debrisIds.isEmpty()) return null;
-        
+
             // 弃用流操作，手工锻造 AWT Area 多边形累加融合板
             java.awt.geom.Area combinedBarricade = new java.awt.geom.Area();
             for (EntityID blockId : debrisIds) {
@@ -666,35 +666,35 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
                 // 执行集合并集
                 combinedBarricade.add(awtAreaNode);
             }
-            
+
             final int lineAmount = concrete.size();
             Line2D collisionFrontier = null;
             int traverseIdx;
-            
+
             // 第一阶段：找出第一条撞上组合路障块的驾驶线
             for (traverseIdx = 0; traverseIdx < lineAmount; ++traverseIdx) {
                 Line2D testTrace = concrete.get(traverseIdx);
                 java.awt.geom.Area carHull = this.computeShape(testTrace);
-                
+
                 // 物理学求交测试
                 carHull.intersect(combinedBarricade);
-        
+
                 boolean isCollided = !carHull.isEmpty();
                 if (isCollided) {
                     collisionFrontier = testTrace;
                     break;
                 }
             }
-            
+
             // 完全没撞上
             if (collisionFrontier == null) {
                 return null;
             }
-        
+
             // 第二阶段：射线延伸联合，探索后续线段是否与当前撞击线共线平齐
             for (++traverseIdx; traverseIdx < lineAmount; ++traverseIdx) {
                 final Line2D subsequentTrace = concrete.get(traverseIdx);
-                
+
                 // 验证夹角与对接点
                 boolean canWeld = this.canUnite(collisionFrontier, subsequentTrace);
                 if (!canWeld) {
@@ -705,27 +705,27 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
             }
             return collisionFrontier;
         }
-        
+
         private Point2D computeMiddlePoint(Line2D line) {
             // 利用矢量学内插获取半程点
             return line.getPoint(0.5);
         }
-        
+
         private boolean canUnite(Line2D line1, Line2D line2) {
             // 刚性对接检测：前一条末端必须紧挨后一条始端
             boolean isDocked = line1.getEndPoint().equals(line2.getOrigin());
             if (!isDocked) {
                 return false;
             }
-        
+
             // 计算双轨道的单位方向矢量
             final Vector2D dir1 = line1.getDirection().normalised();
             final Vector2D dir2 = line2.getDirection().normalised();
-            
+
             // X、Y 投影面近似度比对
             final boolean isXParallel = GeometryTools2D.nearlyZero(dir1.getX() - dir2.getX());
             final boolean isYParallel = GeometryTools2D.nearlyZero(dir1.getY() - dir2.getY());
-            
+
             return isXParallel && isYParallel;
         }
 
@@ -736,24 +736,24 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
             final double destX = line.getEndPoint().getX();
             final double originY = line.getOrigin().getY();
             final double destY = line.getEndPoint().getY();
-        
+
             // 计算车体矢量行车距
             final double spanDiffX = destX - originX;
             final double spanDiffY = destY - originY;
             final double tripDistance = Math.hypot(spanDiffX, spanDiffY);
-            
+
             // 提取侧面展开扩张宽度矩阵
             final double widthExtLeftX = spanDiffY * AGENT_RADIUS / tripDistance;
             final double widthExtLeftY = -spanDiffX * AGENT_RADIUS / tripDistance; // 等价原版 (x1-x2)
             final double widthExtRightX = -spanDiffY * AGENT_RADIUS / tripDistance; // 等价原版 (y1-y2)
             final double widthExtRightY = spanDiffX * AGENT_RADIUS / tripDistance;
-        
+
             // 推算底盘四轮点位投影
             final Point2D wheelFrontLeft = new Point2D(originX + widthExtLeftX, originY + widthExtLeftY);
             final Point2D wheelRearLeft = new Point2D(destX + widthExtLeftX, destY + widthExtLeftY);
             final Point2D wheelRearRight = new Point2D(destX + widthExtRightX, destY + widthExtRightY);
             final Point2D wheelFrontRight = new Point2D(originX + widthExtRightX, originY + widthExtRightY);
-        
+
             Point2D[] hullBox = new Point2D[] { wheelFrontLeft, wheelRearLeft, wheelRearRight, wheelFrontRight };
             return makeAWTArea(hullBox);
         }
@@ -762,11 +762,11 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     // ========================================================================
     // [底盘动力学接口封装]
     // ========================================================================
-    
+
     private Action makeActionToClear(List<EntityID> path, Line2D clearline) {
         // 解析路障清理射线段的源点
         final Point2D strikeOrigin = clearline.getOrigin();
-        
+
         // 计算炮塔距离打击点的直线间距
         double separationDist = GeometryTools2D.getDistance(this.getPoint(), strikeOrigin);
 
@@ -774,9 +774,9 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         final Vector2D blastVector = clearline.getDirection();
         final int mechanicalReach = this.scenarioInfo.getClearRepairDistance();
         final Vector2D blastEnvelope = blastVector.normalised().scale(mechanicalReach);
-        
+
         final Action ripAction = new ActionClear(this.agentInfo, blastEnvelope);
-        
+
         // 如果障碍物已经紧贴在防撞保险杠上（小于碰撞半径）
         boolean withinStrikingDistance = (separationDist <= AGENT_RADIUS);
         if (withinStrikingDistance) {
@@ -787,7 +787,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         // 距离过远，生成向前逼近的底盘牵引命令
         final int forwardX = (int) strikeOrigin.getX();
         final int forwardY = (int) strikeOrigin.getY();
-        
+
         final Action approachMove = new ActionMove(path, forwardX, forwardY);
         return approachMove;
     }
@@ -797,10 +797,10 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         final EntityID selfMac = this.agentInfo.getID();
         final EntityID footHold = this.worldInfo.getPosition(selfMac).getID();
         final Area groundMesh = (Area) this.worldInfo.getEntity(id);
-        
+
         boolean hasDebrisInfo = groundMesh.isBlockadesDefined();
         if (!hasDebrisInfo) return null;
-        
+
         // 使用传统比较器进行解耦式的就近排序，破坏原始的流畅链式调用长相
         List<EntityID> blockadeManifest = new ArrayList<>(groundMesh.getBlockades());
         Comparator<EntityID> proximitySorter = new Comparator<EntityID>() {
@@ -820,20 +820,20 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         for (EntityID debrisId : blockadeManifest) {
             final Blockade debrisObj = (Blockade) this.worldInfo.getEntity(debrisId);
             java.awt.Shape debrisOutline = debrisObj.getShape();
-            
+
             java.awt.geom.Area shapeNode = new java.awt.geom.Area(debrisOutline);
             java.awt.geom.Area intersectionNode = (java.awt.geom.Area) shapeNode.clone();
-            
+
             // 布尔交集演算
             intersectionNode.intersect(mechHalo);
-            
+
             boolean isTouching = !intersectionNode.isEmpty();
             if (isTouching) {
                 // 如果擦碰，直接输出对此石块的点对点销毁打击
                 return new ActionClear(debrisId);
             }
         }
-        
+
         // 如果没碰上任何东西，保底攻击距离最近的那个
         boolean isListClean = blockadeManifest.isEmpty();
         if (isListClean) {
@@ -900,11 +900,11 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     private static java.awt.geom.Area makeAWTArea(Point2D[] cornerVertices) {
         if (cornerVertices == null) throw new NullPointerException("Vertices missing for AWT generation");
         if (cornerVertices.length == 0) throw new IllegalArgumentException("Zero vertices box");
-        
+
         // 划线起草多边形边界
         Path2D boundingBorder = new Path2D.Double();
         boundingBorder.moveTo(cornerVertices[0].getX(), cornerVertices[0].getY());
-        
+
         // 连线合围
         for (int ptIdx = 1; ptIdx < cornerVertices.length; ++ptIdx) {
             boundingBorder.lineTo(cornerVertices[ptIdx].getX(), cornerVertices[ptIdx].getY());
@@ -916,12 +916,12 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     public static java.awt.geom.Area makeAWTArea(Point2D focalCenter, double envelopeRadius) {
         if (focalCenter == null) throw new IllegalArgumentException("Center point anchor void");
         if (envelopeRadius <= 0) throw new IllegalArgumentException("Mechanical Radius MUST > 0");
-        
+
         // 将中心辐射半径转化为AWT库所需的包围盒左上角长宽参数
         final double boxDiameter = envelopeRadius * 2.0;
         final double boxStartX = focalCenter.getX() - envelopeRadius;
         final double boxStartY = focalCenter.getY() - envelopeRadius;
-        
+
         Ellipse2D.Double circleMold = new Ellipse2D.Double(boxStartX, boxStartY, boxDiameter, boxDiameter);
         return new java.awt.geom.Area(circleMold);
     }
@@ -950,7 +950,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     private Action makeActionToAvoidError() {
         final EntityID currentBase = this.agentInfo.getPosition();
         Set<EntityID> tacticalScope = new HashSet<>();
-        
+
         // 收入当前驻地
         tacticalScope.add(currentBase);
 
@@ -989,12 +989,12 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
 
         // 获取破拆铲头伸展长度极限
         final int reachLimit = this.scenarioInfo.getClearRepairDistance();
-        
+
         // 如果雷达扫射连一块石头都没发现，无功而返
         if (nearestDebrisId == null) {
             return null;
         }
-        
+
         // 如果那块最近的石头刚好在切割齿轮距内，原地怒扫清除它
         boolean isWithinSawReach = (closestDebrisDist <= reachLimit);
         if (isWithinSawReach) {
@@ -1004,7 +1004,7 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
         // 不在攻击范围内：呼叫 A* 尝试向这块石头的底座发动自杀式冲锋
         final Blockade debrisModel = (Blockade) this.worldInfo.getEntity(nearestDebrisId);
         EntityID baseNodeOfDebris = debrisModel.getPosition();
-        
+
         this.pathPlanner.setFrom(currentBase);
         this.pathPlanner.setDestination(baseNodeOfDebris);
         this.pathPlanner.calc();
@@ -1021,21 +1021,21 @@ public class UESTCRouteSanitization extends ExtAction implements UESTCCommunalOb
     private double computeDistance(EntityID blockadeIdToken) {
         // 重塑碎片实体外壳
         Blockade barricadeData = (Blockade) this.worldInfo.getEntity(blockadeIdToken);
-        
+
         // 获取多边形的顶点矩阵图
         int[] apexPointsRaw = barricadeData.getApexes();
         List<Point2D> apexPointList = GeometryTools2D.vertexArrayToPoints(apexPointsRaw);
-        
+
         // 闭环描线拉伸出边缘实线
         List<Line2D> edgeBoundary = GeometryTools2D.pointsToLines(apexPointList, true);
-        
+
         // 取出自我中心点位
         Point2D myGravityPoint = this.getPoint();
-        
+
         // 利用投射测距得出最短边距离
         Point2D hitIntercept = UESTCRouteSanitization.computeClosestPoint(edgeBoundary, myGravityPoint);
         double finalSeparation = GeometryTools2D.getDistance(myGravityPoint, hitIntercept);
-        
+
         return finalSeparation;
     }
 }

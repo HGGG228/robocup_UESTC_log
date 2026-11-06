@@ -1,13 +1,13 @@
-package UESTC.module.complex.common; 
+package UESTC.module.complex.common;
 
-import java.util.Set; 
+import java.util.Set;
 
 
 import org.locationtech.jts.geom.*;
 
 
-import rescuecore2.standard.entities.Blockade; 
-import rescuecore2.worldmodel.EntityID;        
+import rescuecore2.standard.entities.Blockade;
+import rescuecore2.worldmodel.EntityID;
 /**
  * EntrappedState 受困状态雷达侦测器。
  * 核心战术价值：当车辆发现自己无法移动时，调用此雷达扫描脚底。
@@ -18,7 +18,7 @@ public class EntrappedState {
 
   // 侦测结果标定：只要发现自己踩中了哪怕一个路障，此警报就会被拉响（置为 true）
   private boolean result = false;
-  
+
   // 罪魁祸首记录：如果确认被卡住，这里将记录下究竟是哪个具体的碎石堆困住了我
   private Blockade blockade = null;
 
@@ -33,7 +33,7 @@ public class EntrappedState {
     if (obstacleCollection == null) {
       return;
     }
-    
+
     // 启动经典的 For-Each 巡检机制，挨个排查周围的每一个碎石堆
     for (Blockade currentObstacle : obstacleCollection) {
       // 呼叫底层的精密几何分析仪，判断我的坐标 (X,Y) 是否落入了当前碎石堆的内部
@@ -58,16 +58,16 @@ public class EntrappedState {
     if (targetBlockade == null) {
       return false;
     }
-    
+
     // 从系统底层抽出这个碎石堆的原始轮廓顶点数据：[X1, Y1, X2, Y2, X3, Y3...]
     int[] rawVertices = targetBlockade.getApexes();
-    
+
     // 计算该多边形真实的物理角点数量
     int actualVertexCount = rawVertices.length / 2;
-    
+
     // 准备一块画板：按照 JTS 的严苛标准，闭合多边形的顶点数组必须首尾相连，所以容量为 N + 1
     Coordinate[] closedPolygonCoordinates = new Coordinate[actualVertexCount + 1];
-    
+
     // 启动组装流水线：将干瘪的一维数组转化为丰满的 JTS 二维坐标对象
     for (int i = 0; i < actualVertexCount; i++) {
       // 提取横坐标 (X 永远在偶数位)
@@ -77,24 +77,24 @@ public class EntrappedState {
       // 烧制成 JTS 专属的坐标点砖块，并铺设到画板上
       closedPolygonCoordinates[i] = new Coordinate(xValue, yValue);
     }
-    
+
     // 完美闭环焊点：将画板上画出的起笔第一个点，强行复制到最后一笔上，形成一个密不透风的图形
     closedPolygonCoordinates[actualVertexCount] = closedPolygonCoordinates[0];
-    
+
     // 启动 JTS 重型几何制造工厂
     GeometryFactory jtsFactory = new GeometryFactory();
-    
+
     try {
         // 工序 1：利用焊死的坐标系，浇筑出那个挡路的碎石多边形实体模型
         Geometry obstaclePolygon = jtsFactory.createPolygon(closedPolygonCoordinates);
-        
+
         // 工序 2：把我的车辆中心坐标也做成一个 JTS 的孤立点模型
         Coordinate agentCoord = new Coordinate(targetX, targetY);
         Point agentPoint = jtsFactory.createPoint(agentCoord);
-        
+
         // 终极审判：利用高级拓扑学定理，判断“面（碎石堆）”是否包含了“点（我的车）”
         return obstaclePolygon.contains(agentPoint);
-        
+
     } catch (Exception e) {
         // 地图畸变防御网：官方给的某些路障顶点可能会形成“自相交”的麻花形状，导致 JTS 工厂崩溃抛出异常。
         // 为了防止一辆救护车因为看一眼路障就导致整个进程暴毙，我们将其捕获，并默认此畸变路障没有卡住我。

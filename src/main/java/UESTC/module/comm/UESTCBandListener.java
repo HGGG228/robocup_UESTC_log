@@ -1,5 +1,6 @@
 package UESTC.module.comm;
 
+import UESTC.module.util.AgentTelemetry;
 import java.util.*;
 import adf.core.component.communication.ChannelSubscriber;
 import rescuecore2.standard.entities.*;
@@ -129,13 +130,13 @@ public class UESTCBandListener extends ChannelSubscriber {
         final int capacityLimit = computeMaxChannels(contextInfo, scenarioConfig);
         // 推导发掘当前执行特工体所享有的极限并行通信频段持握权限峰值指标。
 
-        List<Integer> subscribedBandRegistry = new ArrayList<>(Collections.nCopies(capacityLimit, 0));
-        // 开辟等长于授权峰值的动态线性缓冲序列表，并将其预置充填缺省的安全 0 频段占位符掩码。
+        Set<Integer> subscribedBandRegistry = new LinkedHashSet<>();
+        // 多个订阅槽可能映射到同一物理频道，只保留一次；语音频道无需订阅。
 
-        for (int idxPointer = 0; idxPointer < capacityLimit; ++idxPointer) {
+        for (int idxPointer = 0; availableRadioFrequencies > 0 && idxPointer < capacityLimit; ++idxPointer) {
             // 部署定长约束游标轮询迭代器，逐一填补配发并注册所属容量范围内的合法频带标号。
 
-            subscribedBandRegistry.set(idxPointer, assignChannel(contextInfo, idxPointer, availableRadioFrequencies));
+            subscribedBandRegistry.add(assignChannel(contextInfo, idxPointer, availableRadioFrequencies));
             // 调用底层布号算子换算当前游标顺位对应的真实物理频谱值，更新写入至暂存注册簿。
         }
         // 基于定额核准的频段逐槽分配解析流水线闭合。
@@ -144,6 +145,9 @@ public class UESTCBandListener extends ChannelSubscriber {
         // 强行驱动内部存储转换流，将封箱包装型整型数据群落降维压缩萃取为高性能轻量态原生基础数据类型的标量一维矩阵序列。
 
         commManager.subscribeToChannels(finalSubscriptionMatrix);
+        AgentTelemetry.event(contextInfo, "subscription", "UESTCBandListener",
+                "channels", finalSubscriptionMatrix, "radio_channels", availableRadioFrequencies,
+                "subscription_limit", capacityLimit);
         // 利用底层通讯总控调度台投递已完全封装修缮的物理矩阵串，向底层伺服宣告批量频段占用挂载订阅意图。
     }
     // 监听网络初始挂靠搭桥铺路之入口操作逻辑大盘告终结案。

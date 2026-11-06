@@ -131,7 +131,7 @@ public class UESTCPreemptiveThermalAllocator extends FireTargetAllocator {
 
         Set<EntityID> scanThermalSignatures() {
             Set<EntityID> thermalTargets = new HashSet<>();
-            
+
             // 越权调取全城二维平面网格矩阵
             Collection<EntityID> gridSectors = worldInfo.getEntityIDsOfType(StandardEntityURN.BUILDING);
 
@@ -139,7 +139,7 @@ public class UESTCPreemptiveThermalAllocator extends FireTargetAllocator {
                 StandardEntity entity = worldInfo.getEntity(sectorId);
                 if (entity instanceof Building) {
                     Building structure = (Building) entity;
-                    
+
                     // 战术核验：突破视觉盲区，直击物理底层——只要它在燃烧，且未化为齑粉
                     if (structure.isOnFire() && structure.isFierynessDefined() && structure.getFieryness() < 4) {
                         // 记录极高危热力坐标点
@@ -184,7 +184,7 @@ public class UESTCPreemptiveThermalAllocator extends FireTargetAllocator {
                 for (EntityID infernoId : infernos) {
                     // 测算这台战车扑灭这场大火所能带来的热力学“熵减”收益
                     double currentPull = assessor.calculateEntropyReduction(armorId, infernoId);
-                    
+
                     // 丛林法则：只服从最高引力的目标
                     if (currentPull > maxGravityPull) {
                         maxGravityPull = currentPull;
@@ -212,7 +212,7 @@ public class UESTCPreemptiveThermalAllocator extends FireTargetAllocator {
          * 物理意义：通过建筑内核温度、可燃物基数与欧氏距离的几何畸变，推导出该火场的绝对抢救阈值。
          */
         double calculateEntropyReduction(EntityID armorId, EntityID targetId) {
-            
+
             // 1. 物理坐标系偏折距离
             double absoluteDistance = worldInfo.getDistance(armorId, targetId);
             if (absoluteDistance <= 1.0) {
@@ -223,7 +223,7 @@ public class UESTCPreemptiveThermalAllocator extends FireTargetAllocator {
             Building structure = (Building) worldInfo.getEntity(targetId);
             // 提取结构体深层温度，若探针失效则赋予基础燃烧常数
             int coreTemperature = structure.isTemperatureDefined() ? structure.getTemperature() : 50;
-            
+
             // 3. 物质体量乘数：越庞大的物质集群，一旦彻底失控，带来的熵增越毁灭
             int massVolume = structure.isGroundAreaDefined() ? structure.getGroundArea() : 150;
 

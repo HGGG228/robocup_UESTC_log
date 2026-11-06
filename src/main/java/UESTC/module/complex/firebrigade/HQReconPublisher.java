@@ -6,7 +6,7 @@ import adf.core.component.module.complex.BuildingDetector;
 import rescuecore2.worldmodel.EntityID;
 
 public interface HQReconPublisher {
-    
+
     public BuildingDetector precompute(PrecomputeData precomputeData);
 
     public BuildingDetector resume(PrecomputeData precomputeData);
@@ -19,4 +19,4 @@ public interface HQReconPublisher {
 
     public BuildingDetector calc();
 
-} 
+}

@@ -17,10 +17,10 @@ public class InfernoSectorization extends DynamicClustering {
     // ------------------------------------------------------------------------
     // 依赖注入与核心状态记录区
     // ------------------------------------------------------------------------
-    
+
     // 声明私有不可变变量，用于持有注入的空间邻近分析器模块实例。
     private final Clustering spatialProximityAnalyzer;
-    
+
     // 初始化链表结构，用于缓存当前仿真周期内活跃的火灾聚类簇。
     private List<Cluster> activeFireZones = new LinkedList<>();
 
@@ -50,7 +50,7 @@ public class InfernoSectorization extends DynamicClustering {
 
     // 定义凝聚层次聚类核心方法，负责将离散火点融合为连片的火灾区域。
     private List<Cluster> performAgglomerativeClustering(Collection<EntityID> targetNodes) {
-        
+
         // 遍历输入的离散燃烧节点，将它们逐一初始化为单体聚类单元。
         LinkedList<Cluster> unprocessedQueue = targetNodes.stream()
                 // 运用显式 Lambda 表达式将标识符封装入内部类实例，规避非静态方法引用编译异常。
@@ -60,7 +60,7 @@ public class InfernoSectorization extends DynamicClustering {
 
         // 同步实例化哈希集合，以空间换时间策略优化后续的节点查找性能。
         Set<Cluster> fastLookupSet = new HashSet<>(unprocessedQueue);
-        
+
         // 声明并初始化列表容器，用于存储最终完成聚合固化操作的火灾区域。
         List<Cluster> consolidatedZones = new ArrayList<>();
 
@@ -73,7 +73,7 @@ public class InfernoSectorization extends DynamicClustering {
 
             // 调用相邻区域搜索方法，探测是否存在与基准焦点空间接壤的目标聚类。
             Cluster nearestNeighbor = this.searchForAdjacentZone(focalZone, fastLookupSet);
-            
+
             // 校验搜索结果，判定是否存在满足空间接壤条件的相邻聚类。
             if (nearestNeighbor == null) {
                 // 若无相邻聚类，则判定该焦点区域孤立，直接将其归档至最终结果容器。
@@ -103,7 +103,7 @@ public class InfernoSectorization extends DynamicClustering {
     // 声明相邻区域搜索存根方法，预留用于扩展手动距离探测的算法接口。
     private Cluster searchForAdjacentZone(Cluster focalZone, Set<Cluster> searchSpace) {
         // 维持原始框架的存根设计，当前默认返回空引用以规避无效运算。
-        return null; 
+        return null;
     }
     // 空间探测器存根方法定义结束。
 
@@ -181,16 +181,16 @@ public class InfernoSectorization extends DynamicClustering {
     public Clustering calc() {
         // 清理上一周期的历史聚类数据缓存，为新一轮运算释放内存状态。
         this.activeFireZones.clear();
-        
+
         // 调用扫描函数提取当前周期内所有处于燃烧状态的建筑实体集合。
         Collection<EntityID> combustionNodes = this.identifyIgnitedStructures();
-        
+
         // 验证燃烧节点集合非空状态，确保算法仅在具有有效火情时触发执行。
         if (!combustionNodes.isEmpty()) {
             // 执行凝聚层次聚类分析，将离散火点融合为面状火区并持久化至属性。
             this.activeFireZones = this.performAgglomerativeClustering(combustionNodes);
         }
-        
+
         // 拓扑更新操作完成，返回当前聚类器实例引用以支持外层链式调用。
         return this;
     }
@@ -200,7 +200,7 @@ public class InfernoSectorization extends DynamicClustering {
     public InfernoSectorization(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager mm, DevelopData dd) {
         // 向上调用父类构造器，透传并初始化底层生命周期运作所需的五大基础对象。
         super(ai, wi, si, mm, dd);
-        
+
         // 根据硬编码的模块标识符从系统总线中提取空间相邻关系分析器组件。
         this.spatialProximityAnalyzer = mm.getModule("UESTC.Algorithm.HierarchicalFireClustering.NeighborBuildings");
         // 将该外部依赖组件注册至当前模块子节点清单，确保调度生命周期的同步。
@@ -215,7 +215,7 @@ public class InfernoSectorization extends DynamicClustering {
 
     // 定义内部聚类节点实体，作为封装独立连片火灾区域状态的数据模型。
     public class Cluster {
-        
+
         // 声明私有列表变量，用于存储隶属于该聚类区块内的所有实体标识成员。
         private final List<EntityID> zoneEntities;
 
@@ -252,9 +252,9 @@ public class InfernoSectorization extends DynamicClustering {
         // 声明空间邻近性交叉探测行为，验证当前聚类是否与目标聚类物理接壤。
         public boolean isClose(Cluster targetZone) {
             // 启用嵌套集合流评估，核算本集合内任意节点是否满足对等匹配条件。
-            return this.zoneEntities.stream().anyMatch(sourceNode -> 
+            return this.zoneEntities.stream().anyMatch(sourceNode ->
                 // 开启内层目标遍历流，考察对端集群是否包含特定毗连坐标。
-                targetZone.getMembers().stream().anyMatch(targetNode -> 
+                targetZone.getMembers().stream().anyMatch(targetNode ->
                     // 借调底层的空间邻近分析器模块，判定来源与目标节点间的底层图论连通性。
                     spatialProximityAnalyzer.getClusterEntityIDs(
                         // 反向查询源实体节点在相邻结构分析器中的初始聚落划分索引。
@@ -273,7 +273,7 @@ public class InfernoSectorization extends DynamicClustering {
             return "[" + this.zoneEntities.stream().map(Object::toString).collect(Collectors.joining(",")) + "]";
         }
         // 自定义字符串格式化输出重写完毕。
-        
-    } 
+
+    }
 
 }

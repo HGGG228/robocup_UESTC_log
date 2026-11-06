@@ -39,16 +39,16 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
 
     /** 指挥中枢的拓扑标识。在断壁残垣中定位最高决策层。 */
     private final static StandardEntityURN HQ_IDENTIFIER = AMBULANCE_CENTRE;
-    
+
     /** 医疗救援单元的拓扑标识。 */
     private final static StandardEntityURN MEDICAL_UNIT_URN = AMBULANCE_TEAM;
-    
+
     /** 信念传播算法的收敛迭代阈值。在有限的通信带宽下，截断无意义的无休止协商。 */
     private final static int CONVERGENCE_ITERATIONS = 100;
-    
+
     /** 极端伤亡惩罚基数。若调度失败导致生命流逝，全局目标函数将承受灾难性的数学惩罚。 */
     private final static double FATALITY_COST_CONSTANT = 600.0;
-    
+
     /** 战术游荡占位符。当废墟区域已被清理或目标无法触达时，赋予空闲车辆的默认巡视状态。 */
     private final static EntityID IDLE_STATE_PLACEHOLDER = new EntityID(-1);
 
@@ -58,13 +58,13 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
 
     /** 最终收敛的战术部署矩阵 [车辆ID -> 目标ID] */
     private final Map<EntityID, EntityID> optimizedDispatchMatrix = new HashMap<>();
-    
+
     /** 因子图优化网络（DCOP 拓扑图的基础设施） */
     private final Map<EntityID, Factor<EntityID>> distributedConstraintTopology = new HashMap<>();
-    
+
     /** 克服通信中断的定制化中继基站 */
     private final UESTCDataTransceiver tacticalCommunicationHub;
-    
+
     /** 存活且保持通信的在线节点集合 */
     private final Set<EntityID> networkActiveNodes = new HashSet<>();
 
@@ -95,11 +95,11 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
     @Override
     public AmbulanceTargetAllocator calc() {
         this.optimizedDispatchMatrix.clear();
-        
+
         if (this.operationalFleet.isEmpty()) {
             this.buildOperationalFleet();
         }
-        
+
         // 评估指挥链完整性，若网络孤立则退化为单机自主决策
         if (!verifyCommandChainIntegrity()) {
             return this;
@@ -107,14 +107,14 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
 
         // 管道 1：情报解析与目标立案
         this.compileCriticalTargets();
-        
+
         // 管道 2：构建多边博弈沙盘
         FactorGraphBuilder graphBuilder = new FactorGraphBuilder();
         graphBuilder.constructTopology();
-        
+
         // 管道 3：启动 Max-Sum 分布式信念传播
         this.executeBeliefPropagation();
-        
+
         // 管道 4：决策收割与下发
         this.harvestDecisions();
 
@@ -132,7 +132,7 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
 
         this.networkActiveNodes.clear();
         IntelligenceDecoder decoder = new IntelligenceDecoder(mm);
-        
+
         // 分门别类解析来自各个维度的残存电文
         decoder.decodeCivilianDistressSignals();
         decoder.decodeFireBrigadeReconnaissance();
@@ -152,8 +152,8 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
     }
 
     private boolean verifyCommandChainIntegrity() {
-        if (this.scenarioInfo.getScenarioAgentsFs() <= 0 || 
-            this.scenarioInfo.getScenarioAgentsPo() <= 0 || 
+        if (this.scenarioInfo.getScenarioAgentsFs() <= 0 ||
+            this.scenarioInfo.getScenarioAgentsPo() <= 0 ||
             this.scenarioInfo.getScenarioAgentsAc() <= 0) {
             return false;
         }
@@ -169,7 +169,7 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
             primaryHqId = Math.min(primaryHqId, hq.getValue());
         }
 
-        return this.agentInfo.getTime() >= this.scenarioInfo.getKernelAgentsIgnoreuntil() 
+        return this.agentInfo.getTime() >= this.scenarioInfo.getKernelAgentsIgnoreuntil()
                && this.agentInfo.getID().getValue() == primaryHqId;
     }
 
@@ -223,7 +223,7 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
     // 内部类：拓扑网络工程师 (Factor Graph Builder)
     // ========================================================================
     private class FactorGraphBuilder {
-        
+
         void constructTopology() {
             deployVariableNodes();
             deployFactorNodes();
@@ -244,7 +244,7 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
         private void deployFactorNodes() {
             // 实例化代价评估器
             final CostEvaluator evaluator = new CostEvaluator();
-            
+
             for (final EntityID targetId : criticalPatientPool) {
                 CardinalityFactor<EntityID> survivalConstraint = new SetSizeMultiplier<>();
                 survivalConstraint.setFunction(new CardinalityFunction() {
@@ -262,7 +262,7 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
 
         private void establishConstraintEdges() {
             final CostEvaluator evaluator = new CostEvaluator();
-            
+
             for (EntityID unitId : operationalFleet) {
                 List<EntityID> proximityQueue = new ArrayList<>(criticalPatientPool);
                 proximityQueue.sort(new Comparator<EntityID>() {
@@ -277,10 +277,10 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
                 for (EntityID targetId : proximityQueue) {
                     WeightingFactor<EntityID> vNode = (WeightingFactor<EntityID>) distributedConstraintTopology.get(unitId);
                     Factor<EntityID> fNode = distributedConstraintTopology.get(targetId);
-                    
+
                     vNode.addNeighbor(targetId);
                     fNode.addNeighbor(unitId);
-                    
+
                     double debrisNavigationPenalty = evaluator.evaluateNavigationCost(unitId, targetId);
                     vNode.setPotential(targetId, debrisNavigationPenalty);
                 }
@@ -293,7 +293,7 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
     // 修复：移除 static，使其可以访问外部类实例的 worldInfo
     // ========================================================================
     private class CostEvaluator {
-        
+
         double evaluateNavigationCost(EntityID unit, EntityID target) {
             if (target.equals(IDLE_STATE_PLACEHOLDER)) return 0.0;
             // 现在可以正常访问外部类的 worldInfo 了
@@ -308,7 +308,7 @@ public class OptimumMedicAssigner extends AmbulanceTargetAllocator {
             Civilian casualty = (Civilian) worldInfo.getEntity(target);
             double survivalWindow = (double) casualty.getHP() / casualty.getDamage();
             int rubbleBurden = casualty.isBuriednessDefined() ? casualty.getBuriedness() : 0;
-            
+
             double theoreticalWorkforce = (double) rubbleBurden / survivalWindow;
             double baselineRequirement = Math.ceil(theoreticalWorkforce + 1.0);
             double resourceSaturation = Math.min(deployedUnits, baselineRequirement) / baselineRequirement;

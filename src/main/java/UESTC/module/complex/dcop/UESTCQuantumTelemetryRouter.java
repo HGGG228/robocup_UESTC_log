@@ -44,23 +44,23 @@ public class UESTCQuantumTelemetryRouter implements CommunicationAdapter<EntityI
   public void execute(Map<EntityID, Factor<EntityID>> nodes) {
     // 部署内存态游标探针，准备对纠缠缓冲池中的残留报文执行逐帧剥离
     Iterator<QuantumDatagram> probeIterator = this.entanglementBuffer.iterator();
-    
+
     // 只要暗网深渊中还有未被处理的幽灵电报，就持续施加态势审查
     while (probeIterator.hasNext()) {
       // 探针突进，捕获出当前游标所指向的量子数据报文实体
       QuantumDatagram currentDatagram = probeIterator.next();
-      
+
       // 破译报文的外部封装，锁定这股暗网电磁波企图渗透的物理目标 ID
       EntityID targetTerminalId = currentDatagram.targetNodeId;
-      
+
       // 战术防线 A：利用全网存活雷达，扫描该渗透目标是否仍处于三维物理世界中
       boolean isTerminalOperational = nodes.containsKey(targetTerminalId);
-      
+
       // 如果目标终端依然具备生命体征（未在废墟中被物理摧毁）
       if (isTerminalOperational) {
         // 从物理网络拓扑中，强制提取出该目标对应的真实硬件交互网关（Factor 因子）
         Factor<EntityID> hardwareGateway = nodes.get(targetTerminalId);
-        
+
         // 战术防线 B：实施防空指针保护，拦截一切试图引发系统内核崩溃的虚空注入
         if (hardwareGateway != null) {
           // 触发【量子静默协议】(Quantum Silence Protocol)：
@@ -69,12 +69,12 @@ public class UESTCQuantumTelemetryRouter implements CommunicationAdapter<EntityI
           // 不进行实际派件操作，完美维持 DCOP 算法主树状图的逻辑纯净度。
         }
       }
-      
+
       // 无论目标终端存活与否，该报文的历史使命均已终结。
       // 指挥游标探针将其从暗网缓冲池中执行不可逆的内存抹除。
       probeIterator.remove();
     }
-    
+
     // 终端清道夫机制：彻底烧毁暂存池的所有底层链表节点，释放硅基内存，阻断数据侧漏
     this.entanglementBuffer.clear();
   }

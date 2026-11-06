@@ -47,7 +47,7 @@ public class TacticalDisplacement extends ExtAction {
     private boolean requiresExtractionTeam = false;
     private final int extractionCooldownDuration;
     private int extractionCooldownLock = -1;
-    
+
     private Action previousAction = null;
     private Point2D previousCoordinate = null;
 
@@ -60,7 +60,7 @@ public class TacticalDisplacement extends ExtAction {
     }
 
     // ========================================================================
-    // [战术指令输入区] 
+    // [战术指令输入区]
     // ========================================================================
 
     @Override
@@ -115,12 +115,12 @@ public class TacticalDisplacement extends ExtAction {
      */
     private ExtAction commitAction(Action actionToExecute) {
         this.result = actionToExecute;
-        
+
         // 判定在废墟中是否发生“原地踏步”的死锁，若是则拉响请求消防车开路的警报
         if (actionToExecute != null && this.detectMovementDeadlock(actionToExecute)) {
             this.requiresExtractionTeam = true;
         }
-        
+
         // 留存环境快照，供下一仿真帧对比
         this.previousAction = this.result;
         this.previousCoordinate = new Point2D(this.agentInfo.getX(), this.agentInfo.getY());
@@ -136,7 +136,7 @@ public class TacticalDisplacement extends ExtAction {
      */
     private boolean evaluateCriticalTrauma(StandardEntity agent) {
         if (!(agent instanceof Human)) return false;
-        
+
         Human human = (Human) agent;
         int stamina = human.getHP();
         int trauma = human.getDamage();
@@ -145,10 +145,10 @@ public class TacticalDisplacement extends ExtAction {
 
         // 数学等价替换：(stamina / trauma) + 取模判断 -> 向上取整的精确计算法
         int projectedSurvivalChronicle = (int) Math.ceil((double) stamina / trauma);
-        
+
         boolean isLethalTrauma = trauma > this.criticalDamageThreshold;
         boolean willPerishBeforeEnd = (projectedSurvivalChronicle + this.agentInfo.getTime()) < this.simulationCycles;
-        
+
         return isLethalTrauma || willPerishBeforeEnd;
     }
 
@@ -157,10 +157,10 @@ public class TacticalDisplacement extends ExtAction {
      */
     private boolean detectMovementDeadlock(Action currentAction) {
         // 判断条件：当前操作为移动且历史操作也为移动，未被大规模路障物理掩埋，且空间坐标及路线高度重合
-        return (currentAction instanceof ActionMove) && 
-               (this.previousAction instanceof ActionMove) && 
-               !this.isEntangledInDebris() && 
-               new Point2D(this.agentInfo.getX(), this.agentInfo.getY()).equals(this.previousCoordinate) && 
+        return (currentAction instanceof ActionMove) &&
+               (this.previousAction instanceof ActionMove) &&
+               !this.isEntangledInDebris() &&
+               new Point2D(this.agentInfo.getX(), this.agentInfo.getY()).equals(this.previousCoordinate) &&
                ((ActionMove) currentAction).getPath().equals(((ActionMove) this.previousAction).getPath());
     }
 
@@ -173,7 +173,7 @@ public class TacticalDisplacement extends ExtAction {
      */
     private Action planEvacuationRoute(StandardEntity agent, EntityID ultimateObjective) {
         StandardEntity currentLoc = this.worldInfo.getPosition(agent.getID());
-        
+
         // 已抵达安全屋
         if (currentLoc instanceof Refuge) {
             return new ActionRest();
@@ -210,7 +210,7 @@ public class TacticalDisplacement extends ExtAction {
                 safeZones.remove(intermediateSafeZone);
                 if (priorZoneCount == safeZones.size()) break; // 防死循环安全阀
                 priorZoneCount = safeZones.size();
-                
+
             } else {
                 break; // 周围已被废墟彻底堵死
             }
@@ -220,13 +220,13 @@ public class TacticalDisplacement extends ExtAction {
     }
 
     // ========================================================================
-    // [灾难仿真引擎生命周期同步区] 
+    // [灾难仿真引擎生命周期同步区]
     // ========================================================================
 
     @Override
     public ExtAction precompute(PrecomputeData precomputeData) {
         super.precompute(precomputeData);
-        return this; 
+        return this;
     }
 
     @Override

@@ -6,6 +6,7 @@ import static rescuecore2.standard.entities.StandardEntityURN.*;
 import UESTC.module.complex.common.ObjectScreener;
 import UESTC.module.complex.common.SurvivalChronicle;
 import UESTC.module.complex.common.EntrappedState;
+import UESTC.module.util.AgentTelemetry;
 import adf.core.agent.action.Action;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.information.*;
@@ -17,9 +18,7 @@ import adf.core.agent.module.ModuleManager;
 import adf.core.component.communication.CommunicationMessage;
 import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.complex.HumanDetector;
-import adf.core.debug.DefaultLogger;
 import java.util.*;
-import org.apache.log4j.Logger;
 import rescuecore2.misc.Pair;
 import rescuecore2.misc.geometry.Point2D;
 import rescuecore2.standard.entities.*;
@@ -36,45 +35,43 @@ import rescuecore2.worldmodel.EntityID;
  */
 public class BrigadeScout extends HumanDetector {
 
-  private final Logger logger;
-
   /**
    * 物理意义：经过雷达扫描和伤情评估后，决定下车去用铁锹挖的那个人。
    */
   private EntityID finalRescueTarget = null;
-  
+
   /**
    * 物理意义：用于明确当前消防车被分配在了哪一片责任区。
    */
   private Clustering sectorDividerRadar;
-  
+
   /**
    * 物理意义：记录了归属本车负责的所有建筑和道路 ID。
    */
   private Set<EntityID> mySectorEntities = new HashSet<>();
-  
+
   /**
    */
   private final Random stochasticEngine = new Random();
-  
+
   /**
    * 物理意义：专门用于监听平民发来的痛苦哀嚎和求救信号。
    */
   private final CasualtyProfile distressSignalReceiver;
-  
+
   // 固化通信频段标志（语音大喊 / 无线电）
   private final boolean VOICE_CHANNEL = false;
   private final boolean RADIO_CHANNEL = true;
-  
+
   // 固化紧急求救代码
   private final int EMERGENCY_CODE_BURIED = 5;
   private final int EMERGENCY_CODE_BLOCKADE = 6;
-  
+
   /**
    * 物理意义：如果我自己都被埋在废墟里了，我就无法去救别人，只能发信号等别人来救。
    */
   private boolean isMyselfNeedingRescue = false;
-  
+
   // 各种任务类型的分类垃圾桶
   private Set<EntityID> civilianRescueQueue = new HashSet<>();
   private Set<EntityID> teammateRescueQueue = new HashSet<>();
@@ -82,21 +79,21 @@ public class BrigadeScout extends HumanDetector {
   private Set<EntityID> blacklistedAvoidTargets = new HashSet<>();
   private Set<EntityID> nonViableTargets = new HashSet<>();
   private Set<EntityID> broadcastedTargets = new HashSet<>();
-  
+
   /**
    */
   private Pair<Integer, Integer> sectorGeographicCenter = null;
-  
+
   /**
    */
   private Set<EntityID> jurisdictionalEntities = new HashSet<>();
-  
+
   /**
    * 物理意义：记录最近 10 个周期内，各个地区汇聚的消防车数量，用于防扎堆判断。
    */
   private int[] truckDensityHistory = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
   private final int HISTORY_WINDOW_SIZE = truckDensityHistory.length;
-  
+
   /**
    * 物理意义：一个坑周围最多只能站 3 个人挖，再多就施展不开了。
    */
@@ -110,7 +107,7 @@ public class BrigadeScout extends HumanDetector {
   /**
    */
   private Clustering unreachablePathRadar;
-  
+
   /**
    */
   private Clustering physicalTrapRadar;
@@ -122,8 +119,6 @@ public class BrigadeScout extends HumanDetector {
       ScenarioInfo si, ModuleManager mm, DevelopData dd) {
 
     super(ai, wi, si, mm, dd);
-
-    this.logger = DefaultLogger.getLogger(agentInfo.me());
 
     this.sectorDividerRadar = mm.getModule("UESTC.FB.HumanDetector.Clustering");
     this.registerModule(this.sectorDividerRadar);
@@ -142,6 +137,15 @@ public class BrigadeScout extends HumanDetector {
    */
   @Override
   public EntityID getTarget() {
+    AgentTelemetry.decision(this.agentInfo, this.worldInfo, "BrigadeScout", this.finalRescueTarget,
+        "civilianCandidates", this.civilianRescueQueue.size(),
+        "teammateCandidates", this.teammateRescueQueue.size(),
+        "loadCandidates", this.civilianLoadQueue.size(),
+        "sectorSize", this.mySectorEntities.size(),
+        "jurisdictionSize", this.jurisdictionalEntities.size(),
+        "blacklistSize", this.blacklistedAvoidTargets.size(),
+        "nonViableCount", this.nonViableTargets.size(),
+        "selfNeedsRescue", this.isMyselfNeedingRescue);
     return this.finalRescueTarget;
   }
 
@@ -151,7 +155,7 @@ public class BrigadeScout extends HumanDetector {
   @Override
   public HumanDetector updateInfo(MessageManager mm) {
     super.updateInfo(mm);
-    
+
     // 防范单回合内的重复更新
     if (this.getCountUpdateInfo() > 1) {
       return this;
@@ -172,11 +176,9 @@ public class BrigadeScout extends HumanDetector {
 
     // 洗牌任务列表，清理死者或已获救者
     this.purgeInvalidTasks();
-    logger.debug("[UpdateSummary] time=" + agentInfo.getTime()
-        + ", agent=" + agentInfo.getID()
-        + ", pos=" + agentInfo.getPosition()
-        + ", civilianQueue=" + civilianRescueQueue.size()
-        + ", teammateQueue=" + teammateRescueQueue.size());
+    AgentTelemetry.event(this.agentInfo, "update_summary", "BrigadeScout",
+        "civilianQueue", this.civilianRescueQueue.size(),
+        "teammateQueue", this.teammateRescueQueue.size());
     return this;
   }
 
@@ -186,20 +188,19 @@ public class BrigadeScout extends HumanDetector {
    */
   @Override
   public HumanDetector calc() {
-    logger.debug("[CalcStart] time=" + agentInfo.getTime()
-        + ", agent=" + agentInfo.getID()
-        + ", pos=" + agentInfo.getPosition());
+    AgentTelemetry.decision(this.agentInfo, this.worldInfo, "BrigadeScout", this.finalRescueTarget,
+        "phase", "calc_start");
     // 唤醒求救信号处理器
     this.distressSignalReceiver.calc();
 
     final EntityID mySelfId = this.agentInfo.getID();
-    
+
     // 伤情自检：我被埋了吗？如果我被埋了，直接放弃思考，等待救援
     this.isMyselfNeedingRescue = this.evaluateRescueNecessity(mySelfId);
     if (this.isMyselfNeedingRescue) {
       return logCalcResult("buried");
     }
-    
+
     // 获取本回合视野内发生了状态变动的实体
     Set<EntityID> visuallyChangedEntities = this.worldInfo.getChanged().getChangedEntities();
     visuallyChangedEntities.add(mySelfId);
@@ -214,7 +215,7 @@ public class BrigadeScout extends HumanDetector {
     Map<EntityID, Set<EntityID>> civilianDistribution = new HashMap<>();
     Map<EntityID, Set<EntityID>> ambulanceDistribution = new HashMap<>();
     Map<EntityID, Set<EntityID>> fireTruckDistribution = new HashMap<>();
-    
+
     // 战友被埋专门名单
     Set<EntityID> EntrappedStateAmbulances = new HashSet<>();
     Set<EntityID> EntrappedStateFireTrucks = new HashSet<>();
@@ -227,20 +228,20 @@ public class BrigadeScout extends HumanDetector {
       if (!(rawEntity instanceof Human)) {
         continue;
       }
-      
+
       StandardEntity physicalLocation = this.worldInfo.getPosition(currentEntityId);
       // 如果人已经待在避难所（医院）里了，那是绝对安全的，不用我们管
-      if (physicalLocation.getStandardURN().equals(REFUGE)) {
+      if (physicalLocation == null || physicalLocation.getStandardURN().equals(REFUGE)) {
         continue;
       }
-      
+
       // 评估这个人是否需要挖掘，以及是否需要被装载（救护车专属任务，此处仅作记录）
       boolean needsDigging = this.evaluateRescueNecessity(currentEntityId);
       boolean needsLoading = this.evaluateLoadNecessity(currentEntityId);
-      
+
       StandardEntityURN entityType = rawEntity.getStandardURN();
       EntityID locationId = physicalLocation.getID();
-      
+
       // 分兵种建立伤情档案
       if (entityType.equals(AMBULANCE_TEAM)) {
         if (needsDigging) {
@@ -315,14 +316,18 @@ public class BrigadeScout extends HumanDetector {
 
     // --- 平民挖掘分配逻辑 ---
     final StandardEntity myFootprint = this.worldInfo.getPosition(mySelfId);
+    if (myFootprint == null) {
+      this.finalRescueTarget = null;
+      return logCalcResult("position-unavailable");
+    }
     final EntityID myLocationId = myFootprint.getID();
-    
+
     // 1. 脚底下逻辑：如果我脚底下就有被埋的平民，优先挖脚底下的！
     Set<EntityID> victimsUnderMyFeet = civilianDistribution.get(myLocationId);
     if (victimsUnderMyFeet != null) {
       Set<EntityID> fireTrucksHere = fireTruckDistribution.get(myLocationId);
       int diggerCount = 0;
-      
+
       int localWorkforce = 1;
       if (fireTrucksHere != null) {
         localWorkforce = fireTrucksHere.size() + 1;
@@ -350,21 +355,21 @@ public class BrigadeScout extends HumanDetector {
       }
       civilianDistribution.remove(myLocationId); // 脚底下的处理完了
     }
-    
+
     // 2. 远处平民逻辑：脚底下没有，或者挤不进去，就去周围别的建筑挖
     for (Map.Entry<EntityID, Set<EntityID>> locationEntry : civilianDistribution.entrySet()) {
       Set<EntityID> trucksAtThatLocation = fireTruckDistribution.get(locationEntry.getKey());
       int expectedTruckCount = (trucksAtThatLocation == null) ? 1 : trucksAtThatLocation.size() + 1;
       int diggingOrder = 0;
-      
+
       int effectiveTruckCount = Math.max(expectedTruckCount, this.getHistoricalMaxTruckCount());
-      
+
       for (EntityID victimId : this.sortCivilianVictimsByPriority(locationEntry.getValue(), effectiveTruckCount, false)) {
         // 如果他是个黑名单死结，跳过
         if (this.blacklistedAvoidTargets.contains(victimId)) {
           continue;
         }
-        
+
         // 核心评估：结合派过去的车辆数，算算这个人还能不能救得活？
         if (this.isSalvable(victimId, effectiveTruckCount)) {
           // 救得活，且我能挤进去挖
@@ -401,10 +406,8 @@ public class BrigadeScout extends HumanDetector {
   }
 
   private HumanDetector logCalcResult(String reason) {
-    logger.debug("[TargetSelect] time=" + agentInfo.getTime()
-        + ", agent=" + agentInfo.getID()
-        + ", reason=" + reason
-        + ", target=" + finalRescueTarget);
+    AgentTelemetry.event(this.agentInfo, "target_select", "BrigadeScout",
+        "reason", reason, "target", this.finalRescueTarget);
     return this;
   }
 
@@ -415,10 +418,16 @@ public class BrigadeScout extends HumanDetector {
     this.sectorDividerRadar.calc();
     final EntityID myId = this.agentInfo.getID();
     final int sectorId = this.sectorDividerRadar.getClusterIndex(myId);
-    
+
+    if (sectorId < 0) {
+      return;
+    }
     Collection<EntityID> assignedEntities = this.sectorDividerRadar.getClusterEntityIDs(sectorId);
+    if (assignedEntities == null || assignedEntities.isEmpty()) {
+      return;
+    }
     this.mySectorEntities.addAll(assignedEntities);
-    
+
     this.jurisdictionalEntities = new HashSet<>(assignedEntities);
     this.calculateSectorCenter();
   }
@@ -427,14 +436,21 @@ public class BrigadeScout extends HumanDetector {
    * 物理意义：如果我被困住了，立刻用嗓子喊（附近听得见）和用电台发（全城听得见），请求别的车来救我。
    */
   private void emitDistressSignalsIfNeeded(MessageManager mm) {
+    StandardEntity self = this.worldInfo.getEntity(this.agentInfo.getID());
+    if (!(self instanceof FireBrigade)) {
+      return;
+    }
+    FireBrigade mySelfEntity = (FireBrigade) self;
+    if (!mySelfEntity.isPositionDefined() || !mySelfEntity.isXDefined() || !mySelfEntity.isYDefined()) {
+      return;
+    }
     ObjectScreener visualFilter = new ObjectScreener(this.worldInfo, this.agentInfo);
     Set<Blockade> visibleRubble = visualFilter.getBlockades();
-    
+
     // 物理诊断：用我目前的坐标去跟周围的碎石多边形发生碰撞测试，看看我是否被卡死了
     EntrappedState mobilityDiagnostic = new EntrappedState(visibleRubble, this.agentInfo.getX(), this.agentInfo.getY());
     EntityID myLocationId = this.agentInfo.getPosition();
-    FireBrigade mySelfEntity = (FireBrigade) this.worldInfo.getEntity(this.agentInfo.getID());
-    
+
     // 困境 1：路被堵死了过不去（请求警察来锯木头）
     boolean isBlocked = mobilityDiagnostic.isEntrappedState() || (this.isUnreachable() && !this.checkIfBuriedInRubble());
     if (isBlocked) {
@@ -442,7 +458,7 @@ public class BrigadeScout extends HumanDetector {
       mm.addMessage(new MessageFireBrigade(VOICE_CHANNEL, mySelfEntity, EMERGENCY_CODE_BLOCKADE, myLocationId));
       return;
     }
-    
+
     // 困境 2：房子塌了把我埋了（请求同行来挖我）
     if (this.checkIfBuriedInRubble()) {
       mm.addMessage(new MessageFireBrigade(RADIO_CHANNEL, mySelfEntity, EMERGENCY_CODE_BURIED, this.agentInfo.getID()));
@@ -468,8 +484,12 @@ public class BrigadeScout extends HumanDetector {
    * 物理意义：查验自身档案，看看有没有被压在房子底下。
    */
   private boolean checkIfBuriedInRubble() {
-    Human myBody = (Human) this.worldInfo.getEntity(this.agentInfo.getID());
-    
+    StandardEntity self = this.worldInfo.getEntity(this.agentInfo.getID());
+    if (!(self instanceof Human)) {
+      return false;
+    }
+    Human myBody = (Human) self;
+
     // 只有在建筑物里才可能被埋
     if (!(this.agentInfo.getPositionArea() instanceof Building)) {
       return false;
@@ -488,17 +508,20 @@ public class BrigadeScout extends HumanDetector {
   private void calculateSectorCenter() {
     double totalX = 0.0;
     double totalY = 0.0;
-    
+
+    int elementCount = 0;
     for (EntityID elementId : this.jurisdictionalEntities) {
       Pair<Integer, Integer> coords = this.worldInfo.getLocation(elementId);
+      if (coords == null || coords.first() == null || coords.second() == null) {
+        continue;
+      }
       totalX += coords.first();
       totalY += coords.second();
+      elementCount++;
     }
-    
-    int elementCount = this.jurisdictionalEntities.size();
-    if (elementCount > 0) {
-      this.sectorGeographicCenter = new Pair<>((int) (totalX / elementCount), (int) (totalY / elementCount));
-    }
+
+    this.sectorGeographicCenter = elementCount == 0 ? null
+        : new Pair<>((int) (totalX / elementCount), (int) (totalY / elementCount));
   }
 
   /**
@@ -508,19 +531,29 @@ public class BrigadeScout extends HumanDetector {
     if (suspectId == null) {
       return false;
     }
-    Human victim = (Human) this.worldInfo.getEntity(suspectId);
-    return (victim.getHP() > 0 && victim.getBuriedness() > 0);
+    StandardEntity rawEntity = this.worldInfo.getEntity(suspectId);
+    if (!(rawEntity instanceof Human)) {
+      return false;
+    }
+    Human victim = (Human) rawEntity;
+    return victim.isHPDefined() && victim.isBuriednessDefined()
+        && victim.getHP() > 0 && victim.getBuriedness() > 0;
   }
 
   /**
    * 物理意义：判断这个人需不需要被抬上救护车。只有没被埋、活着、且受伤了的平民才需要。
    */
   private boolean evaluateLoadNecessity(EntityID suspectId) {
-    Human victim = (Human) this.worldInfo.getEntity(suspectId);
-    if (!(victim instanceof Civilian)) {
+    if (suspectId == null) {
       return false;
     }
-    return (victim.getHP() > 0 && victim.getBuriedness() == 0 && victim.getDamage() > 0);
+    StandardEntity rawEntity = this.worldInfo.getEntity(suspectId);
+    if (!(rawEntity instanceof Civilian)) {
+      return false;
+    }
+    Civilian victim = (Civilian) rawEntity;
+    return victim.isHPDefined() && victim.isBuriednessDefined() && victim.isDamageDefined()
+        && victim.getHP() > 0 && victim.getBuriedness() == 0 && victim.getDamage() > 0;
   }
 
   /**
@@ -531,15 +564,15 @@ public class BrigadeScout extends HumanDetector {
     if (chaosSet == null || chaosSet.isEmpty()) {
       return new LinkedHashSet<>();
     }
-    
+
     int[] rawIds = new int[chaosSet.size()];
     int cursor = 0;
     for (EntityID e : chaosSet) {
       rawIds[cursor++] = e.getValue();
     }
-    
+
     Arrays.sort(rawIds);
-    
+
     Set<EntityID> orderedSet = new LinkedHashSet<>();
     for (int idVal : rawIds) {
       orderedSet.add(new EntityID(idVal));
@@ -571,7 +604,7 @@ public class BrigadeScout extends HumanDetector {
       }
 
       Civilian civilian = (Civilian) rawEntity;
-      if (!civilian.isHPDefined() || !civilian.isBuriednessDefined()) {
+      if (!civilian.isHPDefined() || !civilian.isBuriednessDefined() || !civilian.isDamageDefined()) {
         continue;
       }
 
@@ -615,7 +648,7 @@ public class BrigadeScout extends HumanDetector {
     }
 
     Civilian civilian = (Civilian) rawEntity;
-    if (!civilian.isHPDefined() || !civilian.isBuriednessDefined()) {
+    if (!civilian.isHPDefined() || !civilian.isBuriednessDefined() || !civilian.isDamageDefined()) {
       return Double.MAX_VALUE;
     }
 
@@ -660,12 +693,12 @@ public class BrigadeScout extends HumanDetector {
     if (diggerSquad == null) {
       return true; // 没人挖，我当然能加入
     }
-    
+
     diggerSquad.add(this.agentInfo.getID());
-    
+
     // 计算坑位上限（基础上限 + 补偿机制）
     int diggerLimit = Math.min(diggerSquad.size(), this.getDynamicDiggerLimit() + this.getDynamicDiggerLimit() * effortMultiplier);
-    
+
     // 按照资历（ID大小）排座次
     int[] sortedIds = new int[diggerSquad.size()];
     int cursor = 0;
@@ -673,7 +706,7 @@ public class BrigadeScout extends HumanDetector {
       sortedIds[cursor++] = e.getValue();
     }
     Arrays.sort(sortedIds);
-    
+
     int myOwnId = this.agentInfo.getID().getValue();
     // 看看在前 limit 个名额里，有没有我？有我说明我挤进去了
     for (int idx = 0; idx < diggerLimit; ++idx) {
@@ -691,19 +724,19 @@ public class BrigadeScout extends HumanDetector {
     if (diggerSquad == null) {
       return true;
     }
-    
+
     diggerSquad.add(this.agentInfo.getID());
-    
+
     int requiredForce = this.getPreciseDiggerLimit(targetVictimId) + this.getPreciseDiggerLimit(targetVictimId) * effortMultiplier;
     int diggerLimit = Math.min(diggerSquad.size(), requiredForce);
-    
+
     int[] sortedIds = new int[diggerSquad.size()];
     int cursor = 0;
     for (EntityID e : diggerSquad) {
       sortedIds[cursor++] = e.getValue();
     }
     Arrays.sort(sortedIds);
-    
+
     int myOwnId = this.agentInfo.getID().getValue();
     for (int idx = 0; idx < diggerLimit; ++idx) {
       if (sortedIds[idx] == myOwnId) {
@@ -734,12 +767,16 @@ public class BrigadeScout extends HumanDetector {
     Human easiestTarget = null;
     int shallowestDepth = Integer.MAX_VALUE;
 
+    if (EntrappedStateAgents == null) {
+      return null;
+    }
     for (EntityID suspectId : EntrappedStateAgents) {
       StandardEntity rawEntity = this.worldInfo.getEntity(suspectId);
       if (rawEntity instanceof Human) {
         Human humanVictim = (Human) rawEntity;
         // 必须还活着
-        if (humanVictim.getHP() > 0) {
+        if (humanVictim.isHPDefined() && humanVictim.isBuriednessDefined()
+            && humanVictim.getHP() > 0 && humanVictim.getBuriedness() > 0) {
           int currentDepth = humanVictim.getBuriedness();
           // 打擂台，寻找埋藏值最小的战友
           if (currentDepth < shallowestDepth) {
@@ -749,7 +786,7 @@ public class BrigadeScout extends HumanDetector {
         }
       }
     }
-    
+
     if (easiestTarget != null) {
         return easiestTarget.getID();
     }
@@ -818,21 +855,22 @@ public class BrigadeScout extends HumanDetector {
    * 如果还没挖出来他就得死，那就放弃他，把宝贵的兵力留给能活下来的人。
    */
   private boolean isSalvable(EntityID victimId, int assignedWorkforce) {
-    StandardEntity rawEntity = this.worldInfo.getEntity(victimId);
-    Human humanBody = (Human) rawEntity;
-    
-    if (humanBody.getBuriedness() == 0 || humanBody.getHP() == 0) {
+    if (!this.evaluateRescueNecessity(victimId)) {
       return false;
     }
+    Human humanBody = (Human) this.worldInfo.getEntity(victimId);
 
     if (humanBody instanceof Civilian) {
+      if (!humanBody.isDamageDefined()) {
+        return false;
+      }
       SurvivalChronicle medicalAnalyzer = new SurvivalChronicle(humanBody);
       int estimatedSurvivalChronicle = medicalAnalyzer.getLifeXpectancy();
       int estimatedDigTime = this.calculateDiggingTime(victimId, assignedWorkforce);
-      
+
       // 如果寿命期望大于挖掘时间，说明能赶在死前挖出来
       return (estimatedSurvivalChronicle - estimatedDigTime > 0);
-    } 
+    }
     // 对于非平民（战友），无条件认为值得救
     return true;
   }
@@ -852,10 +890,10 @@ public class BrigadeScout extends HumanDetector {
   private int calculateRequiredWorkforce(EntityID victimId) {
     Human victim = (Human) this.worldInfo.getEntity(victimId);
     SurvivalChronicle medicalAnalyzer = new SurvivalChronicle(victim);
-    
+
     int depth = victim.getBuriedness();
     int SurvivalChronicle = medicalAnalyzer.getLifeXpectancy();
-    
+
     int requiredForce = 1;
     // 模拟推演：派1个人行不行？派2个人行不行？一直加人，直到挖掘耗时小于他剩余的寿命
     while (SurvivalChronicle - depth / requiredForce <= 0) {
@@ -897,7 +935,7 @@ public class BrigadeScout extends HumanDetector {
 
     if (this.evaluateRescueNecessity(callerId)) {
       this.teammateRescueQueue.add(callerId);
-      this.nonViableTargets.add(callerId);
+      this.nonViableTargets.remove(callerId);
     } else {
       this.teammateRescueQueue.remove(callerId);
     }
@@ -911,7 +949,7 @@ public class BrigadeScout extends HumanDetector {
 
     if (this.evaluateRescueNecessity(callerId)) {
       this.teammateRescueQueue.add(callerId);
-      this.nonViableTargets.add(callerId);
+      this.nonViableTargets.remove(callerId);
     } else {
       this.teammateRescueQueue.remove(callerId);
     }
@@ -925,7 +963,7 @@ public class BrigadeScout extends HumanDetector {
 
     if (this.evaluateRescueNecessity(callerId)) {
       this.teammateRescueQueue.add(callerId);
-      this.nonViableTargets.add(callerId);
+      this.nonViableTargets.remove(callerId);
     } else {
       this.teammateRescueQueue.remove(callerId);
     }
@@ -938,17 +976,17 @@ public class BrigadeScout extends HumanDetector {
     for (CommunicationMessage raw : civMails) {
       this.interpretTelegram((MessageCivilian) raw);
     }
-    
+
     List<CommunicationMessage> ambMails = mm.getReceivedMessageList(MessageAmbulanceTeam.class);
     for (CommunicationMessage raw : ambMails) {
       this.interpretTelegram((MessageAmbulanceTeam) raw);
     }
-    
+
     List<CommunicationMessage> fbMails = mm.getReceivedMessageList(MessageFireBrigade.class);
     for (CommunicationMessage raw : fbMails) {
       this.interpretTelegram((MessageFireBrigade) raw);
     }
-    
+
     List<CommunicationMessage> pfMails = mm.getReceivedMessageList(MessagePoliceForce.class);
     for (CommunicationMessage raw : pfMails) {
       this.interpretTelegram((MessagePoliceForce) raw);
@@ -967,7 +1005,7 @@ public class BrigadeScout extends HumanDetector {
         iterator.remove();
       }
     }
-    
+
     iterator = this.teammateRescueQueue.iterator();
     while (iterator.hasNext()) {
       EntityID targetId = iterator.next();
@@ -976,7 +1014,7 @@ public class BrigadeScout extends HumanDetector {
         iterator.remove();
       }
     }
-    
+
     iterator = this.civilianLoadQueue.iterator();
     while (iterator.hasNext()) {
       EntityID targetId = iterator.next();
@@ -989,7 +1027,7 @@ public class BrigadeScout extends HumanDetector {
     this.civilianRescueQueue.removeAll(this.blacklistedAvoidTargets);
     this.civilianRescueQueue.removeAll(this.nonViableTargets);
     this.teammateRescueQueue.removeAll(this.nonViableTargets);
-    
+
     iterator = this.blacklistedAvoidTargets.iterator();
     while (iterator.hasNext()) {
       EntityID targetId = iterator.next();
@@ -998,7 +1036,7 @@ public class BrigadeScout extends HumanDetector {
         iterator.remove();
       }
     }
-    
+
     iterator = this.broadcastedTargets.iterator();
     while (iterator.hasNext()) {
       EntityID targetId = iterator.next();
@@ -1007,12 +1045,12 @@ public class BrigadeScout extends HumanDetector {
         iterator.remove();
       }
     }
-    
+
     if (this.teammateRescueQueue.isEmpty()) {
       this.blacklistedAvoidTargets.clear();
     }
   }
-  
+
   /**
    * 物理意义：当手头有很多求救名单时，算一笔经济账：
    * 成本 = 物理距离的平方根 + (寿命 - 受伤加重率) + 跨区调度惩罚。
@@ -1021,30 +1059,45 @@ public class BrigadeScout extends HumanDetector {
   private EntityID calculateBestTaskByCost(Set<EntityID> candidateQueue) {
     EntityID optimumTarget = null;
     double lowestCalculatedCost = Double.MAX_VALUE;
-    
+    Pair<Integer, Integer> ownCoords = this.worldInfo.getLocation(this.agentInfo.getID());
+    if (ownCoords == null || ownCoords.first() == null || ownCoords.second() == null) {
+      return null;
+    }
+
     for (EntityID suspectId : candidateQueue) {
-      Human victimBody = (Human) this.worldInfo.getEntity(suspectId);
+      StandardEntity candidate = this.worldInfo.getEntity(suspectId);
+      if (!(candidate instanceof Human)) {
+        continue;
+      }
+      Human victimBody = (Human) candidate;
+      if (!victimBody.isPositionDefined() || !victimBody.isHPDefined()
+          || !victimBody.isBuriednessDefined() || !victimBody.isDamageDefined()) {
+        continue;
+      }
       Pair<Integer, Integer> victimCoords = this.worldInfo.getLocation(suspectId);
-      
+      if (victimCoords == null || victimCoords.first() == null || victimCoords.second() == null) {
+        continue;
+      }
+
       // 跨区调度惩罚：如果这个人不在我的防区里，距离我防区中心越远，惩罚越大
       int outOfBoundsPenalty = 0;
-      if (!this.jurisdictionalEntities.contains(suspectId)) {
+      if (!this.jurisdictionalEntities.contains(victimBody.getPosition()) && this.sectorGeographicCenter != null) {
           outOfBoundsPenalty = Math.abs(this.sectorGeographicCenter.first() - victimCoords.first())
                              + Math.abs(this.sectorGeographicCenter.second() - victimCoords.second());
       }
-      
+
       // 物理油耗成本：曼哈顿距离
-      double physicalDistance = Math.abs(this.agentInfo.getX() - victimCoords.first())
-                              + Math.abs(this.agentInfo.getY() - victimCoords.second());
+      double physicalDistance = Math.abs(ownCoords.first() - victimCoords.first())
+                              + Math.abs(ownCoords.second() - victimCoords.second());
       double geographicCost = Math.sqrt(physicalDistance);
-      
+
       // 生命医学成本：如果他寿命很短，或者伤得极重埋得极深，医疗成本急剧飙升
       SurvivalChronicle medicalAnalyzer = new SurvivalChronicle(victimBody);
       double medicalCost = medicalAnalyzer.getLifeXpectancy() - (victimBody.getDamage() * victimBody.getBuriedness());
-      
+
       // 总代价汇总
       double totalComprehensiveCost = geographicCost + medicalCost + outOfBoundsPenalty;
-      
+
       // 打擂台，寻找代价最小的黄金目标
       if (lowestCalculatedCost > totalComprehensiveCost) {
         lowestCalculatedCost = totalComprehensiveCost;
@@ -1128,7 +1181,7 @@ public class BrigadeScout extends HumanDetector {
 
     final boolean isRoadBlocked = this.unreachablePathRadar.getClusterIndex(myId) >= 0;
     final boolean isBodyStuck = this.physicalTrapRadar.getClusterIndex(myId) >= 0;
-    
+
     return isBodyStuck || isRoadBlocked;
   }
 }

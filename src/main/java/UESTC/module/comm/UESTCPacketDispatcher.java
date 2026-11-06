@@ -1,13 +1,12 @@
 package UESTC.module.comm;
 
+import UESTC.module.util.AgentTelemetry;
 import java.util.*;
 import static java.util.Comparator.*;
 import adf.core.agent.info.*;
 import adf.core.agent.communication.standard.bundle.*;
-import rescuecore2.worldmodel.EntityID;
 import adf.core.component.communication.*;
 import adf.core.agent.communication.MessageManager;
-import static java.util.stream.Collectors.*;
 import java.util.stream.*;
 import static rescuecore2.standard.entities.StandardEntityURN.*;
 import rescuecore2.standard.entities.StandardEntityURN;
@@ -54,42 +53,58 @@ public class UESTCPacketDispatcher extends MessageCoordinator {
     // [SECTION 2] 分拣打包与负载注入处理流 (Message Triage & Payload Injection)
     // ========================================================================
 
-    private static void assignMessagesOnResult(
+    private static void assignMessageOnResult(
             LinkPort physicalBand,
+            StandardMessage validatedPayload,
             List<List<CommunicationMessage>> transmissionBlueprint,
-            ScenarioInfo scenarioConfig) {
-        // 声明深度的消息装填算法分发器，主司将经过层层审批的候选报文压入最终的发射蓝图集。
-
-        final int[] channelAddresses = physicalBand.getNumbers();
-        // 自输入物理频带对象底层截获其在世界通信矩阵中所合法挂名的全量数字编码串。
-
-        int[] dynamicCapacities = IntStream.of(channelAddresses).map(address -> gainBandwidth(address, scenarioConfig)).toArray();
-        // 部署流式探针，将捕获的编号串一一映射代换为其实时剩余的可用信道载荷体积，并固化为追踪阵列。
-
-        for (StandardMessage validatedPayload : physicalBand.getMessages()) {
-            // 驱动循环列车，逐个装载该物理信道内部目前已妥善堆叠的全部合法标准通信封装块。
-
-            final int requiredBytes = validatedPayload.getByteArraySize();
-            // 呼叫通信块自带的底座方法，严谨测量将其序列化为二进制流后所需强占的网络字节数。
-
-            final int bestInjectionSlot = seekBestChannel(requiredBytes, dynamicCapacities);
-            // 将该封包的体积交托给寻优引擎，希冀在其所属频段矩阵中找寻到尚能容纳的最优注入槽口。
-
-            if (bestInjectionSlot < 0) {
-                // 检视寻优引擎的回执暗号，若遭遇 -1 则昭示该频段下属的所有支线皆已爆满拥堵。
-                break;
-                // 启动熔断机制，强制叫停该频段后续所有封包的入列操作以避免溢出损毁。
-            }
-            // 拥塞溢出前置熔断安防阀门审核过闸。
-
-            dynamicCapacities[bestInjectionSlot] -= requiredBytes;
-            // 自最优注入槽口的实时余量账本中扣减核销掉该封包即将吞噬的物理网络字节数。
-
-            transmissionBlueprint.get(channelAddresses[bestInjectionSlot]).add(validatedPayload);
-            // 准确寻址并定向制导，将合规的报文封包实弹压入整个框架底层的发射阵列规划图中对应的发射井。
+            int[] remainingBytes,
+            List<Set<String>> sentMessages) {
+        final int[] channelAddresses = IntStream.of(physicalBand.getNumbers()).distinct().toArray();
+        final int requiredBytes = validatedPayload.getByteArraySize();
+        final String key = messageKey(validatedPayload);
+        // All logical bands share the same physical-channel budget. Do not send
+        // the same message twice when two faction bands map to that channel.
+        int[] availableBytes = IntStream.of(channelAddresses)
+                .map(channel -> sentMessages.get(channel).contains(key)
+                        ? -1 : remainingBytes[channel])
+                .toArray();
+        final int bestInjectionSlot = seekBestChannel(requiredBytes, availableBytes);
+        if (bestInjectionSlot < 0) {
+            // 该消息放不下时，调用方继续尝试后续更小的消息。
+            return;
         }
-        // 频段内部候选队列的穷举装填投递作业循环全线谢幕。
+        int channel = channelAddresses[bestInjectionSlot];
+        remainingBytes[channel] -= requiredBytes;
+        sentMessages.get(channel).add(key);
+        transmissionBlueprint.get(channel).add(validatedPayload);
     }
+
+    /** Use the payload, not object identity or entity-only check keys. */
+    private static String messageKey(StandardMessage message) {
+        // Priority controls which identical copy is kept (deliveries are sorted
+        // first); TTL and transport remain part of the transmitted identity.
+        return message.getClass().getName() + ':' + message.isRadio() + ':' + message.getTTL()
+                + ':' + Base64.getEncoder().encodeToString(message.toByteArray());
+    }
+
+    private static void assignMessagesOnResult(
+            List<LinkPort> bands, List<List<CommunicationMessage>> result,
+            int[] remainingBytes, List<Set<String>> sentMessages) {
+        List<Map.Entry<LinkPort, StandardMessage>> deliveries = new ArrayList<>();
+        for (LinkPort band : bands) {
+            for (StandardMessage message : band.getMessages()) {
+                deliveries.add(new AbstractMap.SimpleImmutableEntry<>(band, message));
+            }
+        }
+        // A low-priority delivery on an earlier faction band must not consume a
+        // shared channel before a high-priority delivery on another band.
+        deliveries.sort(Comparator.comparing(
+                (Map.Entry<LinkPort, StandardMessage> delivery) -> delivery.getValue().getSendingPriority()).reversed());
+        for (Map.Entry<LinkPort, StandardMessage> delivery : deliveries) {
+            assignMessageOnResult(delivery.getKey(), delivery.getValue(), result, remainingBytes, sentMessages);
+        }
+    }
+
     // 消息装箱至最终发射载体阵列管线的核查装载任务结案。
 
     private static int computeMaxChannels(StandardEntityURN entityType, ScenarioInfo scenarioConfig) {
@@ -112,7 +127,8 @@ public class UESTCPacketDispatcher extends MessageCoordinator {
         final int totalAvailableBands = scenarioConfig.getCommsChannelsCount() - 1;
         // 校准并锁定当前大沙盒场景支持开启的纯数据无线电发信频段总体规模宽度（滤除零号）。
 
-        final int allowedQuota = computeMaxChannels(targetFaction, scenarioConfig);
+        if (totalAvailableBands <= 0) return new int[0];
+        final int allowedQuota = Math.max(0, computeMaxChannels(targetFaction, scenarioConfig));
         // 推算并框定目标阵营单位依法被获准挂靠注册的高频并发通信线路最大条数。
 
         final IntStream resolvedBandStream = IntStream.range(0, allowedQuota)
@@ -120,7 +136,7 @@ public class UESTCPacketDispatcher extends MessageCoordinator {
                 .map(quotaCursor -> UESTCBandListener.assignChannel(targetFaction, quotaCursor, totalAvailableBands));
                 // 把流水线上的游标标号混编入阵营属性，经由底端算法映射兑换出真实的可用物理频道号码。
 
-        return resolvedBandStream.toArray();
+        return resolvedBandStream.distinct().toArray();
         // 将数字流水线出产的数据强制压缩固化为纯正一维整数形态矩阵供系统底层派用。
     }
     // 基于阵营特征推演物理信道归属数组矩阵逻辑收束。
@@ -157,10 +173,27 @@ public class UESTCPacketDispatcher extends MessageCoordinator {
     public void coordinate(
             AgentInfo contextAgent, WorldInfo envModel, ScenarioInfo scenarioConfig, MessageManager commManager,
             ArrayList<CommunicationMessage> incomingRawMessages, List<List<CommunicationMessage>> finalTransmissionMatrix) {
+        AgentTelemetry.tick(contextAgent, envModel);
         // 覆写生命周期内极为核心的通讯指控调度钩子，统率每一回合前夕繁复的发报决策前置动作。
 
         final List<StandardMessage> standardizedPayloads = UESTCPacketDispatcher.gatherStandardMessages(incomingRawMessages);
         // 调遣过滤漏斗从泥沙俱下的生糙报文原矿堆里提纯析出架构指定的纯净规范化标准信标集群。
+
+        int[] remainingBytes = new int[finalTransmissionMatrix.size()];
+        List<Set<String>> sentMessages = new ArrayList<>();
+        for (int channel = 0; channel < remainingBytes.length; channel++) {
+            // This prevents double accounting across this agent's logical bands;
+            // the server still enforces the aggregate limit across all agents.
+            remainingBytes[channel] = gainBandwidth(channel, scenarioConfig);
+            Set<String> sent = new HashSet<>();
+            for (CommunicationMessage message : finalTransmissionMatrix.get(channel)) {
+                if (message instanceof StandardMessage standard) {
+                    remainingBytes[channel] -= standard.getByteArraySize();
+                    sent.add(messageKey(standard));
+                }
+            }
+            sentMessages.add(sent);
+        }
 
         List<LinkPort> physicalBandAllocators = new LinkedList<>();
         // 新修筑一条松耦合架构的管道链表，用作依次挂载后续针对不同兵种介质配置的多路发射器探针通道。
@@ -180,16 +213,46 @@ public class UESTCPacketDispatcher extends MessageCoordinator {
         physicalBandAllocators.stream().forEach(bandAllocator -> standardizedPayloads.forEach(standardPayload -> bandAllocator.addWithFilter(standardPayload)));
         // 指挥各路挂载的专属物理频段过滤器网格对洗炼出的全量纯净消息堆发起双重嵌套交叉矩阵盲投试探与筛选截留。
 
-        physicalBandAllocators.stream().forEach(bandAllocator -> {
-            // 对历经重重把关装填完毕且均已入列就绪的所有通讯收发干线发射器队列下达联合调度总令。
+        assignMessagesOnResult(physicalBandAllocators, finalTransmissionMatrix, remainingBytes, sentMessages);
 
-            bandAllocator.sort();
-            // 督促每一个满载信息的物理信道内部遵照优先级法则自行开展发射前的倒排队列整理动作。
+        logTransmission(contextAgent, incomingRawMessages, finalTransmissionMatrix);
+    }
 
-            UESTCPacketDispatcher.assignMessagesOnResult(bandAllocator, finalTransmissionMatrix, scenarioConfig);
-            // 命定装填分发器登场将这些经由严苛筛查重排后的精锐报文稳准狠地打入架构底层的网段终极大蓝图内排班发车。
-        });
-        // 所有通讯并发发射干线的最终调度梳理投递循环动作顺利竣工息影。
+    /** Summarize proposed and actually packed messages without changing allocation. */
+    private static void logTransmission(AgentInfo agent, List<CommunicationMessage> proposed,
+                                        List<List<CommunicationMessage>> packed) {
+        try {
+            Map<String, Integer> proposedTypes = new TreeMap<>();
+            Map<String, Integer> packedTypes = new TreeMap<>();
+            Map<Integer, Integer> channelBytes = new TreeMap<>();
+            Set<CommunicationMessage> packedUnique = Collections.newSetFromMap(new IdentityHashMap<>());
+            int packedCopies = 0;
+            for (CommunicationMessage message : proposed) {
+                if (message != null) proposedTypes.merge(message.getClass().getSimpleName(), 1, Integer::sum);
+            }
+            for (int channel = 0; channel < packed.size(); channel++) {
+                int bytes = 0;
+                for (CommunicationMessage message : packed.get(channel)) {
+                    if (message == null) continue;
+                    packedCopies++;
+                    packedUnique.add(message);
+                    packedTypes.merge(message.getClass().getSimpleName(), 1, Integer::sum);
+                    if (message instanceof StandardMessage standard) bytes += standard.getByteArraySize();
+                }
+                if (bytes > 0) channelBytes.put(channel, bytes);
+            }
+            int notPacked = 0;
+            for (CommunicationMessage message : proposed) {
+                if (message != null && !packedUnique.contains(message)) notPacked++;
+            }
+            AgentTelemetry.event(agent, "communication", "UESTCPacketDispatcher",
+                    "proposed", proposed.size(), "packed_copies", packedCopies,
+                    "packed_unique", packedUnique.size(), "not_packed", notPacked,
+                    "proposed_types", proposedTypes, "packed_types", packedTypes,
+                    "channel_bytes", channelBytes);
+        } catch (RuntimeException ignored) {
+            // Diagnostics must not interrupt message delivery.
+        }
     }
     // 跨频段通信调度与频宽最优拟合装填发送主流程完美截断歇工。
 

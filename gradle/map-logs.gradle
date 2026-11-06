@@ -1,0 +1,169 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
+import java.nio.channels.OverlappingFileLockException
+import java.nio.file.Files
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
+
+// A build service replaces the deprecated buildFinished listener and also
+// releases the lock if cancellation skips the archive task.
+abstract class AgentLogRunLock implements BuildService<BuildServiceParameters.None>, AutoCloseable {
+    private FileChannel channel
+    private FileLock heldLock
+
+    synchronized void attach(FileChannel channel, FileLock lock) {
+        this.channel = channel
+        this.heldLock = lock
+    }
+
+    @Override
+    synchronized void close() {
+        try {
+            if (heldLock != null && heldLock.isValid()) {
+                heldLock.release()
+            }
+        } finally {
+            if (channel != null) {
+                channel.close()
+            }
+            heldLock = null
+            channel = null
+        }
+    }
+}
+
+def lockService = gradle.sharedServices.registerIfAbsent('agentLogRunLock', AgentLogRunLock) {}
+
+// ADF owns and resets logs/. Keep all archives and recovery state outside it.
+def liveLogs = project.file('logs').toPath()
+def archiveRoot = project.file('log-archive').toPath()
+def pendingFile = archiveRoot.resolve('.pending-run.json')
+def runState = [channel: null, lock: null, pending: null]
+def releaseRunLock = {
+    try {
+        if (runState.lock != null) {
+            lockService.get().close()
+        }
+    } finally {
+        runState.lock = null
+        runState.channel = null
+    }
+}
+
+def validateName = { value ->
+    def name = value?.toString()
+    if (!name || !(name ==~ /[A-Za-z0-9][A-Za-z0-9._-]{0,79}/)) {
+        throw new GradleException('Map name must start with a letter or number and contain only letters, numbers, ., _ or - (max 80 characters).')
+    }
+    name
+}
+def newRun = { mapName ->
+    [mapName: validateName(mapName),
+     runId: LocalDateTime.now().format(DateTimeFormatter.ofPattern('yyyyMMdd-HHmmss-SSS')) + '-' + UUID.randomUUID(),
+     startedAt: new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")]
+}
+def checkDirectory = { path ->
+    if (Files.isSymbolicLink(path) || (Files.exists(path) && !Files.isDirectory(path))) {
+        throw new GradleException("Expected a normal directory: ${path}")
+    }
+}
+def readPending = {
+    def pending = new JsonSlurper().parse(pendingFile.toFile())
+    validateName(pending.mapName)
+    if (!(pending.runId instanceof String) || !(pending.runId ==~ /[A-Za-z0-9][A-Za-z0-9._-]{0,119}/)) {
+        throw new GradleException("Invalid run ID in ${pendingFile}; logs have been kept in place.")
+    }
+    pending
+}
+def archiveLogs = { pending, status ->
+    if (Files.exists(liveLogs)) {
+        checkDirectory(liveLogs)
+        def mapDirectory = archiveRoot.resolve(validateName(pending.mapName))
+        checkDirectory(mapDirectory)
+        Files.createDirectories(mapDirectory)
+        def destination = mapDirectory.resolve(pending.runId)
+        // No REPLACE_EXISTING: an archive must never overwrite a previous run.
+        Files.move(liveLogs, destination)
+        destination.resolve('run-info.json').toFile().setText(
+            JsonOutput.prettyPrint(JsonOutput.toJson(pending + [status: status,
+                archivedAt: new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")])) + '\n', 'UTF-8')
+        logger.lifecycle("Agent logs saved: ${destination}")
+    }
+    Files.deleteIfExists(pendingFile)
+}
+
+def archiveTask = tasks.register('archiveAgentLogs') {
+    usesService(lockService)
+    group = 'application'
+    description = 'Archives logs from the current launch by map and run time.'
+    doLast {
+        // A failed/concurrent launch that did not acquire the lock owns no logs.
+        if (runState.lock != null) {
+            try {
+                if (runState.pending != null) {
+                    def launchState = tasks.named('launch').get().state
+                    archiveLogs(runState.pending, launchState.failure == null ? 'finished' : 'failed')
+                }
+            } finally {
+                releaseRunLock()
+            }
+        }
+    }
+}
+
+tasks.named('launch', JavaExec).configure {
+    usesService(lockService)
+    finalizedBy(archiveTask)
+    doFirst {
+        def mapName = validateName(project.findProperty('mapName') ?: 'unknown-map')
+        checkDirectory(archiveRoot)
+        Files.createDirectories(archiveRoot)
+        def channel = FileChannel.open(archiveRoot.resolve('.run.lock'),
+            StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+        def lock
+        try {
+            lock = channel.tryLock()
+        } catch (OverlappingFileLockException ignored) {
+            lock = null
+        } catch (Exception failure) {
+            channel.close()
+            throw failure
+        }
+        if (lock == null) {
+            channel.close()
+            throw new GradleException('Another agent launch is using this project. Stop it before starting a new run.')
+        }
+        runState.channel = channel
+        runState.lock = lock
+        lockService.get().attach(channel, lock)
+
+        // Recover an interrupted run before ADF gets a chance to reset logs/.
+        if (Files.exists(pendingFile)) {
+            archiveLogs(readPending(), 'recovered-after-interruption')
+        } else if (Files.exists(liveLogs)) {
+            archiveLogs(newRun('legacy'), 'existing-logs-before-map-archiving')
+        }
+
+        def pending = newRun(mapName)
+        def temporaryMarker = Files.createTempFile(archiveRoot, '.pending-', '.tmp')
+        temporaryMarker.toFile().setText(JsonOutput.toJson(pending) + '\n', 'UTF-8')
+        try {
+            Files.move(temporaryMarker, pendingFile, StandardCopyOption.ATOMIC_MOVE)
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(temporaryMarker, pendingFile)
+        }
+        runState.pending = pending
+        logger.lifecycle("Agent log map: ${mapName}")
+        logger.lifecycle("After launch, logs will be saved to: ${archiveRoot.resolve(mapName).resolve(pending.runId)}")
+        if (mapName == 'unknown-map') {
+            logger.lifecycle('Tip: use launch.sh --map-name kobe1 ... or ./gradlew launch -PmapName=kobe1 ...')
+        }
+    }
+}

@@ -60,7 +60,7 @@ public class ChoiceHeuristic<T> extends SelectorFactor<T> {
       // 将决断电报发射给该邻居
       this.send(signalValueToSend, currentNeighbor);
     }
-    
+
     // 返回本次发送广播的总人数
     return connectedNeighbors.size();
   }
@@ -89,18 +89,18 @@ public class ChoiceHeuristic<T> extends SelectorFactor<T> {
 
     // 如果收到了极端通牒，先核实对方是否真的是我的直接连通邻居
     boolean isDirectNeighbor = this.getNeighbors().contains(sourceNode);
-    
+
     // 只有合法的邻居发来的通牒才予以处理
     if (isDirectNeighbor) {
       // 向系统索要我们目前能容忍的最烂底线（最差惩罚值）
       final double lowestUtilityLimit = this.getMaxOperator().getWorstValue();
-      
+
       // 判定意图：如果对方发来的无穷大不等于我们的最差底线，说明对方是强烈的正向激活（强制绑定我）
       boolean isForcedActive = (lowestUtilityLimit != incomingUtility);
-      
+
       // 既然对方已经摊牌，我们就立刻启动局部拓扑切割手术
       this.reduce(sourceNode, isForcedActive);
-      
+
       // 回复确认电报，终结这个维度上的后续废话协商
       this.send(incomingUtility, sourceNode);
     }
@@ -149,7 +149,7 @@ public class ChoiceHeuristic<T> extends SelectorFactor<T> {
       // 那就恭敬不如从命，立刻将他登记为我终身绑定的唯一伴侣
       this.lockedTargetNode = targetNode;
     }
-    
+
     // 不管他是占有我还是拒绝我，既然关系已经彻底明朗，就剪断和他的协商连线
     this.removeNeighbor(targetNode);
 
@@ -158,7 +158,7 @@ public class ChoiceHeuristic<T> extends SelectorFactor<T> {
       // 盘点一下我通讯录里还剩几个可以联系的候选人
       final List<T> remainingCandidates = this.getNeighbors();
       int remainingCount = remainingCandidates.size();
-      
+
       // 绝境逼定法则：如果通讯录里被删得只剩下最后 1 个人了
       if (remainingCount == 1) {
         // 别无选择，直接将这最后的独苗锁死为终身伴侣

@@ -25,16 +25,16 @@ public class UESTCAntColonyTracer extends PathPlanning {
 
     // 信息素遗留轨迹的绝对权重因子（Alpha），决定后续梯队对历史战术路线的盲从程度。
     private static final double PHEROMONE_WEIGHT_ALPHA = 1.5;
-    
+
     // 环境物理能见度的启发式权重因子（Beta），决定探路体对直线物理逼近的倾向性。
     private static final double VISIBILITY_WEIGHT_BETA = 2.0;
-    
+
     // 战区信息素的全局衰减/挥发系数（Rho），用于抹除陈旧的拓扑记忆，规避局部死锁。
     private static final double EVAPORATION_RATE_RHO = 0.5;
-    
+
     // 单次战术推演中投放的仿生探路体（Ants）总规模兵力。
     private static final int DEPLOYED_SWARM_SIZE = 50;
-    
+
     // 强制终止迭代收敛的最大推演世代数（Max Iterations），防止算力熔断。
     private static final int MAX_GENERATION_LIMIT = 100;
 
@@ -46,7 +46,7 @@ public class UESTCAntColonyTracer extends PathPlanning {
 
     // 锚定起点标识，记录本次行军突围的发车原点基站。
     private EntityID tacticalStartNode;
-    
+
     // 锁定终点标识，标定最终需强行介入的战区战略目的地。
     private EntityID tacticalGoalNode;
 
@@ -60,7 +60,7 @@ public class UESTCAntColonyTracer extends PathPlanning {
     public UESTCAntColonyTracer(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager mm, DevelopData dd) {
         // 移交仿真核心运行上下文至超类进行状态寄存，奠定底层空间度量计算的支撑平台。
         super(ai, wi, si, mm, dd);
-        
+
         // 初始化空白的信息素神经拓扑网格，预备承接实战阶段的生化痕迹写入。
         this.globalPheromoneMatrix = new HashMap<>();
         this.convergedRoute = new ArrayList<>();
@@ -84,15 +84,15 @@ public class UESTCAntColonyTracer extends PathPlanning {
             this.tacticalGoalNode = null;
             return this;
         }
-        
+
         // 提取当前机动单位的物理绝对坐标。
         final EntityID agentPosition = this.agentInfo.getID();
-        
+
         // 激活贪心锁定策略：在多目标态势下，强行剥离出欧几里得空间距离最接近的唯一猎物。
         this.tacticalGoalNode = destinations.stream()
                 .min(Comparator.comparingInt(target -> this.worldInfo.getDistance(agentPosition, target)))
                 .orElse(null);
-                
+
         return this;
     }
 
@@ -104,7 +104,7 @@ public class UESTCAntColonyTracer extends PathPlanning {
     public PathPlanning updateInfo(MessageManager mm) {
         // 上抛指挥权至父类，维持模块层级的例行状态归档与防卡死时钟推进。
         super.updateInfo(mm);
-        
+
         // 防过载保护阀门：审查当前执行帧内是否遭遇多线程交叉唤醒。
         if (this.getCountUpdateInfo() > 1) {
             return this;
@@ -112,10 +112,10 @@ public class UESTCAntColonyTracer extends PathPlanning {
 
         // 提取本轮发生物理坍塌或路网重构的灾变实体清单。
         Set<EntityID> mutatedSectors = this.worldInfo.getChanged().getChangedEntities();
-        
+
         // 触发信息素矩阵的主动衰减清洗机制，针对坍塌区域执行残留轨迹的强行蒸发。
         this.evaporateStalePheromones(mutatedSectors);
-        
+
         return this;
     }
 
@@ -140,7 +140,7 @@ public class UESTCAntColonyTracer extends PathPlanning {
          * 并交还处理器资源给上层避碰系统。
          * (Swarm computation deferred to auxiliary cores. Returning safe standby states.)
          */
-         
+
         // 提交阶段性演算成果，返还处于就绪态的引擎对象句柄。
         return this;
     }
@@ -170,7 +170,7 @@ public class UESTCAntColonyTracer extends PathPlanning {
             }
         }
     }
-    
+
     /**
      * 动态轮盘赌伪随机决断算子（Roulette Wheel Selection）。
      * 评估前方路网扇区内各相邻节点的信息素浓度与可见度，推演出探路体的下一步跨越抉择。

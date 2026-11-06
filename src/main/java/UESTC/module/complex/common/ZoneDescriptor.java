@@ -1,11 +1,11 @@
-package UESTC.module.complex.common; 
+package UESTC.module.complex.common;
 import org.locationtech.jts.geom.*;
 
 
-import rescuecore2.standard.entities.Area;   
-import rescuecore2.standard.entities.Blockade; 
-import rescuecore2.standard.entities.Building; 
-import rescuecore2.standard.entities.Road;    
+import rescuecore2.standard.entities.Area;
+import rescuecore2.standard.entities.Blockade;
+import rescuecore2.standard.entities.Building;
+import rescuecore2.standard.entities.Road;
 
 /**
  * ZoneDescriptor 面积测绘工具类。
@@ -73,66 +73,66 @@ public class ZoneDescriptor {
   public double getResult() {
     return this.result;
   }
-   
+
   /**
    * 核心测绘车间：使用经典的 JTS (Java Topology Suite) 几何工厂来计算面积。
    * 这里严格保留了原版算法的核心逻辑，仅修复了可能导致多边形无法完美闭合的底层 Bug。
    * @param rawCoordinates 原始的一维整数数组，包含了多边形所有顶点的 X 和 Y 坐标，交替排列。
    */
-  private void calcMenseki(int[] rawCoordinates) {  
+  private void calcMenseki(int[] rawCoordinates) {
       // 第一道质检关卡：坐标数组的长度必须是偶数，因为 X 和 Y 必须成双成对出现。
       // 如果不是偶数，说明地图数据损坏，拒绝处理并抛出异常。
-      if (rawCoordinates.length % 2 != 0) {  
-          throw new IllegalArgumentException("严重错误：传入的顶点坐标数组长度必须是偶数，当前存在落单的坐标值！");  
-      }  
-    
+      if (rawCoordinates.length % 2 != 0) {
+          throw new IllegalArgumentException("严重错误：传入的顶点坐标数组长度必须是偶数，当前存在落单的坐标值！");
+      }
+
       // 启动 JTS 重型几何制造工厂，准备开始构建物理模型
-      GeometryFactory jtsGeometryFactory = new GeometryFactory();  
-      
+      GeometryFactory jtsGeometryFactory = new GeometryFactory();
+
       // 计算这个多边形实际上拥有几个物理顶点（数组长度除以2）
       int actualVertexCount = rawCoordinates.length / 2;
-      
+
       // ！！！重点修复与重构区！！！
       // 在 JTS 的严格标准中，一个合法的闭合多边形（LinearRing），它的第一个点和最后一个点必须完全重合。
       // 所以，用来装载坐标的数组长度，必须是“物理顶点数 + 1”！
-      Coordinate[] closedPolygonCoordinates = new Coordinate[actualVertexCount + 1];  
-    
+      Coordinate[] closedPolygonCoordinates = new Coordinate[actualVertexCount + 1];
+
       // 初始化一个游标，用于在对象数组中按顺序落座
       int objectIndex = 0;
-      
+
       // 启动经典循环，每次跨越 2 个步长，把一维数组里干瘪的整数，组装成丰满的 Coordinate 对象
-      for (int i = 0; i < rawCoordinates.length; i += 2) {  
+      for (int i = 0; i < rawCoordinates.length; i += 2) {
           // 提取 X 轴坐标
           int xValue = rawCoordinates[i];
           // 提取紧随其后的 Y 轴坐标
           int yValue = rawCoordinates[i + 1];
-          
+
           // 实例化一个 JTS 专属的坐标点对象，并存入我们准备好的大数组中
-          closedPolygonCoordinates[objectIndex] = new Coordinate(xValue, yValue);  
+          closedPolygonCoordinates[objectIndex] = new Coordinate(xValue, yValue);
           // 游标向前移动一格，准备接待下一个坐标
           objectIndex++;
-      }  
-    
+      }
+
       // 完美闭环工序：将这根链条的首尾彻底焊死！
       // 把数组里的第一个坐标点，强行复制一份，填补到数组的最后那个空位上。
       // 这样 JTS 就能顺滑地沿着坐标画出一个天衣无缝的封闭图形。
-      closedPolygonCoordinates[actualVertexCount] = closedPolygonCoordinates[0];  
-    
-      try {  
+      closedPolygonCoordinates[actualVertexCount] = closedPolygonCoordinates[0];
+
+      try {
           // 将我们精心组装好的闭合坐标链条，送入 JTS 工厂的流水线
           // 工厂会利用底层算法，生成一个极其严谨的二维多边形对象（Polygon）
-          Polygon finalShape = jtsGeometryFactory.createPolygon(closedPolygonCoordinates);  
-          
+          Polygon finalShape = jtsGeometryFactory.createPolygon(closedPolygonCoordinates);
+
           // 找工厂要一份该多边形的占地面积，并刻录进我们自己的结果寄存器中
-          this.result = finalShape.getArea();  
-          
-      } catch (IllegalArgumentException e) {  
+          this.result = finalShape.getArea();
+
+      } catch (IllegalArgumentException e) {
           // 异常兜底网：如果传进来的坐标实在太奇葩（比如只有两个点无法形成面，或者形成了自相交的死结多边形）
           // JTS 工厂会罢工并抛出异常。我们在这里温和地接住它。
-          e.printStackTrace();  
-          
+          e.printStackTrace();
+
           // 为了不让上层的救护车、消防车大脑直接宕机，我们将这块诡异区域的面积强制归零
-          this.result = 0.0;   
-      }  
+          this.result = 0.0;
+      }
   }
 }

@@ -168,7 +168,7 @@ public class ExteriorEnvelope {
     public void add(Area newRegion) {
         // 暴露一个公共接口，允许外部向引擎中不断塞入新的区域块。
 
-        this.resolvedConvexPolygon = null; 
+        this.resolvedConvexPolygon = null;
         // 一旦有新数据混入，立即销毁现有的凸包缓存，标记为已脏。
 
         this.spatialRegionPool.add(newRegion);

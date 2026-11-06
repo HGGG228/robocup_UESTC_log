@@ -20,7 +20,7 @@ public class CongestedZoneAnalyzer extends StaticClustering {
 
     // 声明评估特定物理位置空间拥堵状态的私有核心方法。
     private boolean evaluateSpatialCongestion(EntityID locationMarker, StandardEntityURN targetUrn, int perceptionRadius) {
-        
+
         // 构建不可变的哈希映射表，用于存储不同实体类型的全局数量获取逻辑。
         Map<StandardEntityURN, Supplier<Long>> globalUnitDemographics = Map.of(
                 // 映射救护车队枚举类型至获取对应智能体总数的供给函数。
@@ -33,16 +33,16 @@ public class CongestedZoneAnalyzer extends StaticClustering {
 
         // 从映射表中提取目标实体类型的数量供给函数指针。
         Supplier<Long> populationMetric = globalUnitDemographics.get(targetUrn);
-        
+
         // 校验供给函数是否为空，以拦截系统不支持的实体类型。
         if (populationMetric == null) {
             // 若实体类型不受支持，则不参与拥堵计算并返回 false。
             return false;
         }
-        
+
         // 执行供给函数，提取该特定实体类型在全局范围内的宏观活动总数。
         long macroPopulation = populationMetric.get();
-        
+
         // 对提取到的总数进行有效性校验，防止出现零或负数的异常状态。
         if (macroPopulation <= 0) {
             // 若总数基数无效，则直接判定为非拥堵状态并返回。
@@ -54,7 +54,7 @@ public class CongestedZoneAnalyzer extends StaticClustering {
                 // 将检索到的实体标识序列逐一映射为真实的物理实体对象。
                 .map(this.worldInfo::getEntity)
                 // 执行类型过滤，保留与当前分析目标实体类型相匹配的对象。
-                .filter(entity -> entity.getStandardURN().equals(targetUrn)) 
+                .filter(entity -> entity.getStandardURN().equals(targetUrn))
                 // 统计过滤后的实体总数量，计算出该区域局部的微观实体浓度。
                 .count();
 
@@ -67,15 +67,15 @@ public class CongestedZoneAnalyzer extends StaticClustering {
     private Collection<EntityID> scanForCongestedHotspots(StandardEntityURN requestedUrn, int radiusLimit) {
         // 初始化哈希集合，用于存储被判定为拥堵状态的物理坐标点。
         Collection<EntityID> identifiedHotspots = new HashSet<>();
-        
+
         // 通过世界模型获取指定实体类型当前所有的活跃单位集合。
         Collection<StandardEntity> activeUnits = this.worldInfo.getEntitiesOfType(requestedUrn);
 
         // 遍历所有的活跃单位，逐一进行空间位置的拥堵状态审查。
         for (StandardEntity unit : activeUnits) {
             // 将标准实体对象向下转型为具备位置属性的 Human 实体。
-            Human fieldAgent = (Human) unit; 
-            
+            Human fieldAgent = (Human) unit;
+
             // 提取该 Human 实体当前所在的物理坐标标识。
             EntityID agentPosition = fieldAgent.getPosition();
 
@@ -88,14 +88,14 @@ public class CongestedZoneAnalyzer extends StaticClustering {
 
             // 声明变量，用于存储验证通过的实体分类标识。
             StandardEntityURN verifiedClassification;
-            
+
             // 使用异常捕获机制，验证外部传入枚举参数的合法性。
             try {
                 // 调用内部验证方法，确认实体类型是否为受支持的合法枚举。
                 verifiedClassification = this.validateEntityClassification(requestedUrn);
             } catch (IllegalArgumentException ex) {
                 // 若抛出非法参数异常，说明该实体类型不支持拥堵分析。
-                continue; 
+                continue;
                 // 捕获异常并终止当前单位的分析流程，进入下一轮循环。
             }
             // 实体类型合法性验证通过。
@@ -120,7 +120,7 @@ public class CongestedZoneAnalyzer extends StaticClustering {
             throw new IllegalArgumentException("Critical Error: Null StandardEntityURN provided.");
         }
         // 空指针拦截校验通过。
-        
+
         // 启用 Switch 表达式，将输入的枚举值路由至对应的核验分支。
         return switch (inputUrn) {
             // 匹配并返回救护车队实体枚举类型。
@@ -144,10 +144,10 @@ public class CongestedZoneAnalyzer extends StaticClustering {
 
         // 扫描消防队类型的拥堵热点，并将结果汇入总缓存集合中。
         this.congestedZonesCache.addAll(this.scanForCongestedHotspots(StandardEntityURN.FIRE_BRIGADE, perceptionLimit));
-        
+
         // 扫描救护车队类型的拥堵热点，并持续扩充缓存集合。
         this.congestedZonesCache.addAll(this.scanForCongestedHotspots(StandardEntityURN.AMBULANCE_TEAM, perceptionLimit));
-        
+
         // 扫描警察部队类型的拥堵热点，完成最后一轮热点数据汇聚。
         this.congestedZonesCache.addAll(this.scanForCongestedHotspots(StandardEntityURN.POLICE_FORCE, perceptionLimit));
 
@@ -161,7 +161,7 @@ public class CongestedZoneAnalyzer extends StaticClustering {
     public Clustering precompute(PrecomputeData precomputeData) {
         // 调用基类方法，完成底层预计算基础设施的初始化。
         super.precompute(precomputeData);
-        
+
         // 校验调用次数，防止重复执行引发幂等性问题。
         if (this.getCountPrecompute() > 1) {
             // 若调用次数超过限制，则拦截该次重复的计算请求。
@@ -171,10 +171,10 @@ public class CongestedZoneAnalyzer extends StaticClustering {
 
         // 校验通过，调用核心计算方法执行全图范围的拥堵分析。
         this.calc();
-        
+
         // 将计算得出的拥堵热点集合转换为列表，并写入预计算数据对象中进行持久化。
         precomputeData.setEntityIDList(PERSISTENCE_CACHE_KEY, new ArrayList<>(this.congestedZonesCache));
-        
+
         // 离线计算与持久化工作完成，返回实例引用。
         return this;
     }
@@ -185,24 +185,24 @@ public class CongestedZoneAnalyzer extends StaticClustering {
     public Clustering resume(PrecomputeData precomputeData) {
         // 调用基类方法，执行底层的通用数据恢复逻辑。
         super.resume(precomputeData);
-        
+
         // 执行调用次数校验，设置防重复执行的安全屏障。
         if (this.getCountResume() > 1) {
             // 若检测到重复调用，则直接返回当前实例对象。
             return this;
         }
         // 重复调用校验完毕。
-        
+
         // 使用预设的缓存键名，从持久化数据中提取上一周期的拥堵坐标列表。
         List<EntityID> recoveredHotspots = precomputeData.getEntityIDList(PERSISTENCE_CACHE_KEY);
-        
+
         // 对提取的数据进行非空校验，以确保数据的有效性。
         if (recoveredHotspots != null) {
             // 若数据有效，则将其全量添加至当前的拥堵区域缓存集合中。
             this.congestedZonesCache.addAll(recoveredHotspots);
         }
         // 数据的反序列化与状态重建流程结束。
-        
+
         // 模块状态恢复完成，返回实例引用。
         return this;
     }
@@ -213,7 +213,7 @@ public class CongestedZoneAnalyzer extends StaticClustering {
     public Clustering preparate() {
         // 调用基类方法，执行常规的准备与环境初始化。
         super.preparate();
-        
+
         // 设置执行频次校验，避免在单周期内过度消耗计算资源。
         if (this.getCountPreparate() > 1) {
             // 若调用频次超限，则直接返回当前实例句柄。
@@ -223,7 +223,7 @@ public class CongestedZoneAnalyzer extends StaticClustering {
 
         // 调用核心计算方法进行实时拥堵分析。
         this.calc();
-        
+
         // 全局分析计算完毕。
         return this;
     }
@@ -248,7 +248,7 @@ public class CongestedZoneAnalyzer extends StaticClustering {
     // 实现重载接口，通过底层 EntityID 获取其对应的聚类索引。
     @Override
     public int getClusterIndex(EntityID entityID) {
-        
+
         return SINGLETON_CLUSTER_INDEX;
     }
     // 标识符索引查询接口实现结束。
@@ -277,7 +277,7 @@ public class CongestedZoneAnalyzer extends StaticClustering {
     public CongestedZoneAnalyzer(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager mm, DevelopData dd) {
         // 调用父类构造器，完成基础依赖组件的深层注入与初始化。
         super(ai, wi, si, mm, dd);
-        
+
         // 触发一次己方阵营类型的获取方法，以唤醒并初始化底层的相关状态机制。
         this.agentInfo.me().getStandardURN();
     }
@@ -285,13 +285,13 @@ public class CongestedZoneAnalyzer extends StaticClustering {
 
     // 声明静态常量，表示单例聚类模式下的默认聚类索引。
     private static final int SINGLETON_CLUSTER_INDEX = 0;
-    
+
     // 声明静态常量，限定当前聚类体系的总容量为 1。
     private static final int TOTAL_CLUSTER_CAPACITY = 1;
-    
+
     // 声明静态常量，作为评估拥挤阈值时的人口比例除数。
     private static final int CONGESTION_THRESHOLD_DIVISOR = 2;
-    
+
     // 声明静态常量，用作持久化读写离线缓存数据的唯一键名。
     private static final String PERSISTENCE_CACHE_KEY = "UESTC.module.algorithm.OvercrowdingArea.c";
 

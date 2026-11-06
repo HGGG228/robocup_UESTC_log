@@ -136,7 +136,7 @@ public class UESTCSeismicBreachDelegator extends PoliceTargetAllocator {
 
         Set<EntityID> scanStructuralAnomalies() {
             Set<EntityID> obstacleTargets = new HashSet<>();
-            
+
             // 越权调取全城二维平面网格矩阵中的所有路障实体
             Collection<EntityID> anomalySectors = worldInfo.getEntityIDsOfType(StandardEntityURN.BLOCKADE);
 
@@ -144,7 +144,7 @@ public class UESTCSeismicBreachDelegator extends PoliceTargetAllocator {
                 StandardEntity entity = worldInfo.getEntity(sectorId);
                 if (entity instanceof Blockade) {
                     Blockade rock = (Blockade) entity;
-                    
+
                     // 战术核验：突破视觉盲区，直击物理底层——只要它具备物理维修成本，且未被粉碎
                     if (rock.isRepairCostDefined() && rock.getRepairCost() > 5) {
                         // 记录致密岩体坐标点
@@ -201,7 +201,7 @@ public class UESTCSeismicBreachDelegator extends PoliceTargetAllocator {
                 for (EntityID anomalyId : anomalies) {
                     // 测算这台战车粉碎这块巨石所能带来的交通网“拓扑增益”
                     double currentPull = assessor.calculateTopologyGain(armorId, anomalyId);
-                    
+
                     // 丛林法则：只服从最高引力（最高性价比）的目标
                     if (currentPull > maxKineticPull) {
                         maxKineticPull = currentPull;
@@ -229,7 +229,7 @@ public class UESTCSeismicBreachDelegator extends PoliceTargetAllocator {
          * 物理意义：通过岩体致密度、多边形面积与欧氏距离的几何畸变，推导出该巨石的绝对破拆阈值。
          */
         double calculateTopologyGain(EntityID armorId, EntityID targetId) {
-            
+
             // 1. 物理坐标系偏折距离
             double absoluteDistance = worldInfo.getDistance(armorId, targetId);
             if (absoluteDistance <= 1.0) {
@@ -240,7 +240,7 @@ public class UESTCSeismicBreachDelegator extends PoliceTargetAllocator {
             Blockade rock = (Blockade) worldInfo.getEntity(targetId);
             // 提取巨石内部的共价键断裂成本（Repair Cost）
             int densityCost = rock.isRepairCostDefined() ? rock.getRepairCost() : 50;
-            
+
             // 3. 阻塞截面积乘数：通过提取三维顶点的数量映射其在地表的覆盖投影面积
             int projectedArea = rock.isApexesDefined() ? rock.getApexes().length : 4;
 

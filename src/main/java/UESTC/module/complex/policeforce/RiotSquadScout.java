@@ -21,8 +21,7 @@ import UESTC.module.algorithm.SpatialMorphologyCore;
 import java.util.*;
 
 import UESTC.module.util.DebugUtil;
-import adf.core.debug.DefaultLogger;
-import org.apache.log4j.Logger;
+import UESTC.module.util.AgentTelemetry;
 
 /**
  * RiotSquadScout 警察部队战区道路侦察与除障规划雷达。
@@ -36,85 +35,83 @@ import org.apache.log4j.Logger;
  */
 public class RiotSquadScout extends RoadDetector {
 
-  private final Logger logger;
-
   /**
    * 最终锁定的除障目标。
    * 物理意义：经过雷达千锤百炼算出来的，本回合要提着电锯去砍的那个目标区域。
    */
   private EntityID finalTargetArea = null;
-  
+
   /**
    * 战区网格划分雷达。
    * 物理意义：用于明确当前警察被分配在了全城的哪一片责任网格。
    */
   private Clustering sectorDivider;
-  
+
   /**
    * 主干道提取雷达。
    * 物理意义：识别出全城的交通大动脉，主干道往往拥有极高的清障优先级。
    */
   private StaticClustering mainArteryRadar;
-  
+
   /**
    * 拥堵被困雷达。
    * 物理意义：监控全城哪里有人被挤得动弹不得。
    */
   private Clustering EntrappedStateCrowdRadar;
-  
+
   /**
    * 交通严重拥堵区雷达。
    * 物理意义：监控哪里因为路障造成了大规模的车辆和人员堆积。
    */
   private StaticClustering congestionZoneRadar;
-  
+
   /**
    * 基础直线路径规划器。
    */
   private PathPlanning basicNavigator;
-  
+
   /**
    * A* 高级避障寻路引擎。
    * 物理意义：在计算距离时，不能只看直线，要看真正绕过废墟走过去有多远。
    */
   private PathPlanning advancedNavigator;
-  
+
   /**
    * 难民求救电台。
    * 物理意义：监听灾区平民的哀嚎，哪里有求救声，哪里的道路可能就需要打通。
    */
   private CasualtyProfile distressSignalReceiver;
-  
+
   /**
    * 任务优先级记账本。
    * 物理意义：记录了全城所有的路段（Key）及其对应的紧急程度（Value）。数字越小，越紧急！
    */
   private Map<EntityID, Integer> taskPriorityLedger = new HashMap<>();
-  
+
   /**
    * 辖区待清理道路名册。
    * 物理意义：我这个警察目前负责巡视和清理的路段大名单。
    */
   private Set<EntityID> myPatrolSector = new HashSet<>();
-  
+
   /**
    * 已彻底贯通的道路黑名单。
    * 物理意义：如果一条路已经被清理得干干净净了，就记在这里，以后再也不去浪费时间。
    */
   private Set<EntityID> clearedRoadLog = new HashSet<>();
-  
+
   /**
    * 战友遇险拯救档案。
    * 物理意义：记录了那些被埋的警察兄弟，以及他们所在的网格防区。优先打通救他们的路！
    */
   private Map<EntityID, Collection<EntityID>> EntrappedStatePoliceSectors = new HashMap<>();
-  
+
   // 固化通信频段及求救代码
   private final boolean VOICE_CHANNEL = false;
   private final boolean RADIO_CHANNEL = true;
   private final int EMERGENCY_CODE_BURIED = 5;
   private final int EMERGENCY_CODE_BLOCKADE = 6;
-  
+
   /**
    * 调试工具探针。
    */
@@ -128,8 +125,6 @@ public class RiotSquadScout extends RoadDetector {
       AgentInfo ai, WorldInfo wi, ScenarioInfo si,
       ModuleManager mm, DevelopData dd) {
     super(ai, wi, si, mm, dd);
-
-    this.logger = DefaultLogger.getLogger(agentInfo.me());
 
     this.basicNavigator = mm.getModule("UESTC.PF.RoadDetector.PathPlanning");
     this.registerModule(this.basicNavigator);
@@ -161,16 +156,15 @@ public class RiotSquadScout extends RoadDetector {
    */
   @Override
   public RoadDetector calc() {
-    logger.debug("[CalcStart] time=" + agentInfo.getTime()
-        + ", agent=" + agentInfo.getID()
-        + ", pos=" + agentInfo.getPosition()
-        + ", pendingRoads=" + taskPriorityLedger.size());
+    AgentTelemetry.event(this.agentInfo, "calc_start", "RiotSquadScout",
+        "pending_roads", this.taskPriorityLedger.size());
     this.distressSignalReceiver.calc();
     this.finalTargetArea = null;
-    
+
     // 如果处于比赛初期的指令静默期，则原地待命
     if (this.isUnderIdleDiscipline()) {
-      logger.debug("[TargetSelect] time=" + agentInfo.getTime() + ", reason=idle, target=null");
+      AgentTelemetry.event(this.agentInfo, "target_select", "RiotSquadScout",
+          "reason", "idle", "target", null);
       return this;
     }
 
@@ -184,7 +178,7 @@ public class RiotSquadScout extends RoadDetector {
 
     // 第一重排序：按紧急程度（优先级数值越小越好），再按物理直线距离
     Collections.sort(validCandidates, new PrimaryTaskComparator());
-    
+
     // 掐尖机制：只保留排在最前面的 5 个极品任务，减少后续 A* 寻路的算力开销
     int limitCap = Math.min(5, validCandidates.size());
     List<EntityID> eliteTop5Tasks = new ArrayList<>(validCandidates.subList(0, limitCap));
@@ -199,24 +193,21 @@ public class RiotSquadScout extends RoadDetector {
     // 如果转了一圈发现根本没有目标，说明我负责的辖区可能已经干净了！
     if (this.finalTargetArea == null) {
       int previousSectorSize = this.myPatrolSector.size();
-      
+
       // 战术扩张：去接管别人的网格！
       this.expandPatrolSector();
       // 根据新扩张的网格，重新把里面的道路加入账本
       this.refreshLedgerWithSectorData();
       this.refreshLedgerWithCongestionData(1);
-      
+
       // 如果网格确实变大了，说明拿到了新任务，立刻递归重新算一次！
       if (previousSectorSize != this.myPatrolSector.size()) {
         return this.calc();
       }
     }
 
-    logger.debug("[TargetSelect] time=" + agentInfo.getTime()
-        + ", agent=" + agentInfo.getID()
-        + ", candidates=" + validCandidates.size()
-        + ", target=" + finalTargetArea);
-    
+    AgentTelemetry.event(this.agentInfo, "target_select", "RiotSquadScout",
+        "candidates", validCandidates.size(), "target", this.finalTargetArea);
     return this;
   }
 
@@ -228,16 +219,16 @@ public class RiotSquadScout extends RoadDetector {
     @Override
     public int compare(EntityID idAlpha, EntityID idBeta) {
       EntityID mySelfId = agentInfo.getID();
-      
+
       // 比对紧急程度（数值越小优先级越高）
       int priorityA = taskPriorityLedger.get(idAlpha);
       int priorityB = taskPriorityLedger.get(idBeta);
       int priorityComparison = Integer.compare(priorityA, priorityB);
-      
+
       if (priorityComparison != 0) {
         return priorityComparison;
       }
-      
+
       // 紧急程度相同时，比对直线距离
       double distA = worldInfo.getDistance(mySelfId, idAlpha);
       double distB = worldInfo.getDistance(mySelfId, idBeta);
@@ -253,15 +244,15 @@ public class RiotSquadScout extends RoadDetector {
     @Override
     public int compare(EntityID idAlpha, EntityID idBeta) {
       EntityID myLocation = agentInfo.getPosition();
-      
+
       int priorityA = taskPriorityLedger.get(idAlpha);
       int priorityB = taskPriorityLedger.get(idBeta);
       int priorityComparison = Integer.compare(priorityA, priorityB);
-      
+
       if (priorityComparison != 0) {
         return priorityComparison;
       }
-      
+
       double realDistA = calculateNavigatedDistance(myLocation, idAlpha);
       double realDistB = calculateNavigatedDistance(myLocation, idBeta);
       return Double.compare(realDistA, realDistB);
@@ -276,15 +267,15 @@ public class RiotSquadScout extends RoadDetector {
     this.basicNavigator.setFrom(origin);
     this.basicNavigator.setDestination(destination);
     this.basicNavigator.calc();
-    
+
     List<EntityID> routedPath = this.basicNavigator.getResult();
     if (routedPath == null || routedPath.isEmpty()) {
       return Double.MAX_VALUE; // 死路一条，距离无限远
     }
-    
+
     int pathNodeCount = routedPath.size();
     double totalTravelDistance = 0.0;
-    
+
     for (int step = 1; step < pathNodeCount; ++step) {
       totalTravelDistance += this.worldInfo.getDistance(routedPath.get(step - 1), routedPath.get(step));
     }
@@ -305,6 +296,12 @@ public class RiotSquadScout extends RoadDetector {
    */
   @Override
   public EntityID getTarget() {
+    AgentTelemetry.decision(this.agentInfo, this.worldInfo, "RiotSquadScout", this.finalTargetArea,
+        "taskCount", this.taskPriorityLedger.size(),
+        "targetPriority", this.taskPriorityLedger.get(this.finalTargetArea),
+        "patrolSectorSize", this.myPatrolSector.size(),
+        "clearedRoadCount", this.clearedRoadLog.size(),
+        "trappedPoliceSectorCount", this.EntrappedStatePoliceSectors.size());
     return this.finalTargetArea;
   }
 
@@ -341,17 +338,13 @@ public class RiotSquadScout extends RoadDetector {
     this.markClearedRoadsBySight();
     this.processUrgentClearanceRequests();
     this.processNeighboringBlockades();
-    
+
     // 收发电报
     this.receiveRadioMessages(mm);
     this.broadcastEmergencySignals(mm);
+    AgentTelemetry.event(this.agentInfo, "update_summary", "RiotSquadScout",
+        "sector_roads", this.myPatrolSector.size(), "pending_roads", this.taskPriorityLedger.size());
 
-    logger.debug("[UpdateSummary] time=" + agentInfo.getTime()
-        + ", agent=" + agentInfo.getID()
-        + ", pos=" + agentInfo.getPosition()
-        + ", sectorRoads=" + myPatrolSector.size()
-        + ", pendingRoads=" + taskPriorityLedger.size());
-    
     return this;
   }
 
@@ -361,7 +354,7 @@ public class RiotSquadScout extends RoadDetector {
   private void initPatrolSector() {
     this.sectorDivider.calc();
     final EntityID mySelfId = this.agentInfo.getID();
-    
+
     int myAssignedSectorIndex = this.sectorDivider.getClusterIndex(mySelfId);
     Collection<EntityID> zoneEntities = this.sectorDivider.getClusterEntityIDs(myAssignedSectorIndex);
     this.myPatrolSector.addAll(zoneEntities);
@@ -377,7 +370,7 @@ public class RiotSquadScout extends RoadDetector {
     final int myOriginalIndex = this.sectorDivider.getClusterIndex(mySelfId);
 
     final int previousSize = this.myPatrolSector.size();
-    
+
     for (int step = 1; step < totalSectors && previousSize == this.myPatrolSector.size(); ++step) {
       Collection<EntityID> newZoneEntities = this.sectorDivider.getClusterEntityIDs(myOriginalIndex + step * totalSectors);
       this.myPatrolSector.addAll(newZoneEntities);
@@ -427,7 +420,7 @@ public class RiotSquadScout extends RoadDetector {
     EntityID mySelfId = this.agentInfo.getID();
     // 修复：使用返回集合的 EntityID 类型，而不是尝试强转
     Collection<EntityID> allHeroIds = this.worldInfo.getEntityIDsOfType(FIRE_BRIGADE, POLICE_FORCE, AMBULANCE_TEAM);
-    
+
     for (EntityID heroId : allHeroIds) {
       if (!heroId.equals(mySelfId)) {
         StandardEntity hisFootprint = this.worldInfo.getPosition(1, heroId);
@@ -454,10 +447,10 @@ public class RiotSquadScout extends RoadDetector {
   private void refreshLedgerWithCongestionData(int priorityLevel) {
     EntityID mySelfId = this.agentInfo.getID();
     EntityID myLocation = this.agentInfo.getPosition();
-    
+
     int myCongestionZoneIndex = this.congestionZoneRadar.getClusterIndex(mySelfId);
     Collection<EntityID> congestedAreas = this.congestionZoneRadar.getClusterEntityIDs(myCongestionZoneIndex);
-    
+
     for (EntityID crisisAreaId : congestedAreas) {
       if (this.shouldISuperviseCongestionZone(crisisAreaId)) {
         Collection<EntityID> rescuePath = this.advancedNavigator.getResult(myLocation, crisisAreaId);
@@ -482,13 +475,13 @@ public class RiotSquadScout extends RoadDetector {
 
     // 焦点映射：记录视野内那些“确诊已经被彻底清理干净”的区域
     Map<EntityID, EntityID> clearedFocusMap = new HashMap<>();
-    
+
     for (EntityID cId : changedEntities) {
       StandardEntity rawEntity = this.worldInfo.getEntity(cId);
       if (!(rawEntity instanceof Area)) {
         continue;
       }
-      
+
       // 门槛推导：如果看清楚的是一栋楼，那它代表的目标可能是这栋楼的大门路口
       EntityID targetValueId = cId;
       if (!cId.equals(myFootprintId) && rawEntity instanceof Building) {
@@ -511,7 +504,7 @@ public class RiotSquadScout extends RoadDetector {
 
     while (!propagationQueue.isEmpty()) {
       EntityID currentId = propagationQueue.remove();
-      
+
       if (!clearedFocusMap.containsKey(currentId)) {
         continue;
       }
@@ -545,10 +538,10 @@ public class RiotSquadScout extends RoadDetector {
     this.basicNavigator.setFrom(myLocation);
     this.basicNavigator.setDestination(buildingId);
     this.basicNavigator.calc();
-    
+
     List<EntityID> routedPath = this.basicNavigator.getResult();
     if (routedPath == null) routedPath = new ArrayList<>();
-    
+
     // 强制把起点塞进去
     if (routedPath.isEmpty() || !routedPath.get(0).equals(myLocation)) {
       routedPath.add(0, myLocation);
@@ -609,7 +602,7 @@ public class RiotSquadScout extends RoadDetector {
       for (int idx2 = idx1 + 1; idx2 < edgeCount; ++idx2) {
         Line2D lineAlpha = virtualEdges.get(idx1);
         Line2D lineBeta = virtualEdges.get(idx2);
-        
+
         // 如果这个出入口太窄，连一辆车都过不去，直接不予考虑
         if (lineAlpha.getDirection().getLength() < VEHICLE_PASSABLE_RADIUS * 2) {
           continue;
@@ -617,7 +610,7 @@ public class RiotSquadScout extends RoadDetector {
         if (lineBeta.getDirection().getLength() < VEHICLE_PASSABLE_RADIUS * 2) {
           continue;
         }
-        
+
         // 如果这两个出入口之间的通路，被剩下的碎石切断了，判定为不通畅
         if (!SpatialMorphologyCore.validate(passableSurface, lineAlpha, lineBeta)) {
           return false;
@@ -634,10 +627,10 @@ public class RiotSquadScout extends RoadDetector {
    */
   private void processUrgentClearanceRequests() {
     Set<EntityID> changedEntities = this.worldInfo.getChanged().getChangedEntities();
-    
+
     this.EntrappedStateCrowdRadar.calc();
     Collection<EntityID> stuckVictimIds = this.EntrappedStateCrowdRadar.getClusterEntityIDs(0);
-    
+
     for (EntityID cId : changedEntities) {
       if (!stuckVictimIds.contains(cId)) {
         continue;
@@ -669,13 +662,13 @@ public class RiotSquadScout extends RoadDetector {
   private void processNeighboringBlockades() {
     Set<EntityID> changedEntities = this.worldInfo.getChanged().getChangedEntities();
     Set<Human> sensitiveTargets = new HashSet<>();
-    
+
     for (EntityID cId : changedEntities) {
       StandardEntity rawEntity = this.worldInfo.getEntity(cId);
       if (rawEntity instanceof Human) {
         Human hBody = (Human) rawEntity;
         StandardEntity footprint = this.worldInfo.getPosition(hBody);
-        
+
         // 排除掉待在救护车里的人，和警察自己
         if (!(footprint instanceof AmbulanceTeam) && !(hBody instanceof PoliceForce)) {
           sensitiveTargets.add(hBody);
@@ -687,15 +680,15 @@ public class RiotSquadScout extends RoadDetector {
       StandardEntity targetFootprint = this.worldInfo.getPosition(targetHuman);
       if (targetFootprint instanceof Area) {
         Area targetArea = (Area) targetFootprint;
-        
+
         for (EntityID neighborAreaId : targetArea.getNeighbours()) {
           StandardEntity nEntity = this.worldInfo.getEntity(neighborAreaId);
           if (nEntity instanceof Area) {
             Area nArea = (Area) nEntity;
-            
+
             boolean isNotClearedYet = !this.clearedRoadLog.contains(neighborAreaId);
             boolean hasRubble = nArea.isBlockadesDefined();
-            
+
             // 如果旁边这条路有石头且还没扫干净，提权！
             if (isNotClearedYet && hasRubble) {
               this.assignTaskPriority(neighborAreaId, 2);
@@ -723,7 +716,7 @@ public class RiotSquadScout extends RoadDetector {
     for (CommunicationMessage msg : ambTelegrams) {
       this.decodeEmergencyTelegram((MessageAmbulanceTeam) msg);
     }
-    
+
     List<CommunicationMessage> fbTelegrams = mm.getReceivedMessageList(MessageFireBrigade.class);
     for (CommunicationMessage msg : fbTelegrams) {
       this.decodeEmergencyTelegram((MessageFireBrigade) msg);
@@ -744,7 +737,7 @@ public class RiotSquadScout extends RoadDetector {
 
     double signalRadius = this.scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
     boolean isNearby = this.worldInfo.getDistance(this.agentInfo.getID(), senderId) <= signalRadius;
-    
+
     if (isNearby) {
       this.assignTaskPriority(crisisLocationId, 0);
       this.clearedRoadLog.remove(crisisLocationId);
@@ -768,7 +761,7 @@ public class RiotSquadScout extends RoadDetector {
 
     double signalRadius = this.scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
     boolean isNearby = this.worldInfo.getDistance(this.agentInfo.getID(), senderId) <= signalRadius;
-    
+
     if (isNearby) {
       this.assignTaskPriority(crisisLocationId, 0);
       this.clearedRoadLog.remove(crisisLocationId);
@@ -852,7 +845,7 @@ public class RiotSquadScout extends RoadDetector {
     EntityID myLocation = this.agentInfo.getPosition();
     Set<EntityID> changedEntities = this.worldInfo.getChanged().getChangedEntities();
     Set<PoliceForce> newlyUpdatedPolice = new HashSet<>();
-    
+
     for (EntityID cId : changedEntities) {
       StandardEntity rawEntity = this.worldInfo.getEntity(cId);
       if (rawEntity instanceof PoliceForce) {
@@ -868,24 +861,24 @@ public class RiotSquadScout extends RoadDetector {
       if (colleagueId.equals(this.agentInfo.getID())) {
         continue;
       }
-      
+
       // 喜讯：他被挖出来了
       if (colleagueObj.getBuriedness() == 0) {
         if (this.EntrappedStatePoliceSectors.containsKey(colleagueId)) {
           this.myPatrolSector.removeAll(this.EntrappedStatePoliceSectors.get(colleagueId));
         }
         this.EntrappedStatePoliceSectors.remove(colleagueId);
-      } 
+      }
       // 噩耗：他被埋了，且我之前还没接管他的地盘
       else if (!this.EntrappedStatePoliceSectors.containsKey(colleagueId)) {
         if (this.evaluateAdoptingBuriedColleagueSector(colleagueObj)) {
           // 接管他的防区
           this.absorbColleagueSector(colleagueId);
-          
+
           // 并为他原来负责的拥堵区立刻派发寻路清障任务（提权1级）
           Integer hisCongestionIndex = this.congestionZoneRadar.getClusterIndex(colleagueId);
           Collection<EntityID> crisisAreas = this.congestionZoneRadar.getClusterEntityIDs(hisCongestionIndex);
-          
+
           // 手动排序
           List<EntityID> sortedCrisisAreas = new ArrayList<>(crisisAreas);
           Collections.sort(sortedCrisisAreas, new Comparator<EntityID>(){
@@ -893,7 +886,7 @@ public class RiotSquadScout extends RoadDetector {
               return Integer.compare(a.getValue(), b.getValue());
             }
           });
-          
+
           for (EntityID cAreaId : sortedCrisisAreas) {
             if (this.shouldISuperviseCongestionZone(cAreaId, colleagueId)) {
               Collection<EntityID> rescuePath = this.advancedNavigator.getResult(myLocation, cAreaId);
@@ -932,7 +925,7 @@ public class RiotSquadScout extends RoadDetector {
     if (this.clearedRoadLog.contains(congestionAreaId)) {
       return false;
     }
-    
+
     int mySectorIndex = this.sectorDivider.getClusterIndex(this.agentInfo.getID());
     Collection<EntityID> mySectorNodes = this.sectorDivider.getClusterEntityIDs(mySectorIndex);
     EntityID mySectorAnchor = null;
@@ -956,7 +949,7 @@ public class RiotSquadScout extends RoadDetector {
     if (this.clearedRoadLog.contains(congestionAreaId)) {
       return false;
     }
-    
+
     int hisSectorIndex = this.sectorDivider.getClusterIndex(colleagueId);
     Collection<EntityID> hisSectorNodes = this.sectorDivider.getClusterEntityIDs(hisSectorIndex);
     EntityID hisSectorAnchor = null;

@@ -32,7 +32,7 @@ public class ObjectScreener {
   private ScenarioInfo si;
   // 雷达屏幕：存放当前这个时间步（Timestep）内，视线里所有发生了变动的物体集合
   private Set<EntityID> changed = new HashSet<>();
-  
+
   // 记录我自己的绝对物理横坐标 X
   private double x = 0.0;
   // 记录我自己的绝对物理纵坐标 Y
@@ -462,7 +462,7 @@ public class ObjectScreener {
     Pair<Integer, Integer> p1 = this.wi.getLocation(a1);
     Pair<Integer, Integer> p2 = this.wi.getLocation(a2);
     return Math.hypot(
-        Math.abs(p1.first() - p2.first()), 
+        Math.abs(p1.first() - p2.first()),
         Math.abs(p1.second() - p2.second())
     );
   }
@@ -478,7 +478,7 @@ public class ObjectScreener {
     double dis = Double.MAX_VALUE;
     // 使用团队自定义的地质雷达工具，判断我所在的坐标 (x,y) 是否被路障围死了
     final EntrappedState stucked = new EntrappedState(bs, x, y);
-    
+
     for (Blockade b : bs) {
       // 如果我已经身陷囹圄，那就把困住我的那个路障直接定为最急需处理的目标
       if (stucked.isEntrappedState()) {
@@ -499,38 +499,38 @@ public class ObjectScreener {
    * 物理意义：路障（Blockade）不是一个点，而是一堆不规则的碎石多边形。
    * 我们要把多边形的每一条边（线段）都扒出来，计算车体中心点到这条线段的最短投影距离。
    */
-  private double getDistance(Blockade b, double x, double y) {  
+  private double getDistance(Blockade b, double x, double y) {
     // 拿到组成这个碎石堆边缘的所有顶点坐标 [X1, Y1, X2, Y2, X3, Y3...]
-    int[] apexs = b.getApexes();  
-    double dis = Double.MAX_VALUE;  
-  
+    int[] apexs = b.getApexes();
+    double dis = Double.MAX_VALUE;
+
     // 多边形实际有多少个顶点
     int totalPoints = apexs.length / 2;
-    
+
     // 遍历多边形的每一条封闭边缘线段
-    for (int i = 0; i < totalPoints; i++) {  
+    for (int i = 0; i < totalPoints; i++) {
         // 提取线段起点的 X 和 Y
-        double x1 = apexs[2 * i];  
-        double y1 = apexs[2 * i + 1];  
-        
+        double x1 = apexs[2 * i];
+        double y1 = apexs[2 * i + 1];
+
         // 提取线段终点的 X 和 Y（使用取模运算巧妙实现多边形首尾闭合）
         int nextIndex = (i + 1) % totalPoints;
-        double x2 = apexs[2 * nextIndex];  
-        double y2 = apexs[2 * nextIndex + 1];  
-  
+        double x2 = apexs[2 * nextIndex];
+        double y2 = apexs[2 * nextIndex + 1];
+
         // 利用线性代数公式：计算点到直线的法向投影距离
-        double dx = x2 - x1;  
-        double dy = y2 - y1;  
-  
-        if (dx != 0 || dy != 0) {  
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+
+        if (dx != 0 || dy != 0) {
             // 点到直线方程距离公式：d = |Ax + By + C| / sqrt(A^2 + B^2) 的变体
-            double dist = Math.abs((dx * (y - y1) - dy * (x - x1)) / Math.sqrt(dx * dx + dy * dy));  
-            if (dis > dist) {  
-                dis = dist;  
-            }  
-        }  
-    }  
-    return dis;  
+            double dist = Math.abs((dx * (y - y1) - dy * (x - x1)) / Math.sqrt(dx * dx + dy * dy));
+            if (dis > dist) {
+                dis = dist;
+            }
+        }
+    }
+    return dis;
   }
 
   /**

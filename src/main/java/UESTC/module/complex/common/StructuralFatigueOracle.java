@@ -1,4 +1,4 @@
-package UESTC.module.complex.common; 
+package UESTC.module.complex.common;
 
 import rescuecore2.standard.entities.Building;
 
@@ -12,23 +12,23 @@ public class StructuralFatigueOracle {
 
   // 观察对象：当前需要进行物理承重力与热辐射评估的建筑实体
   private Building targetBuilding;
-  
+
   // ==================== 物理建材衰减模型常数矩阵 ====================
   // 物理意义：燃烧或受损建筑的崩塌并不是线性的。随着承重墙的持续受热，
   // 钢筋混凝土结构会发生非线性的屈服形变（如热胀冷缩撕裂、材料熔点剥离）。
 
   // 基础环境白噪声常数：即使火势被控制，受损建筑在风力与自重下每回合也会产生的微观断裂
   private final double NOISE_FACTOR = 0.15;
-  
+
   // 核心热力学侵蚀（Thermal Erosion）二次项加速系数：模拟高温对钢筋骨架的指数级软化效应
   private final double THERMAL_QUADRATIC_COEF = 0.00045;
-  
+
   // 连带沉降剪切力（Shear Stress）二次项加速系数：模拟部分楼板塌陷后对剩余承重墙的拉扯破坏
   private final double SHEAR_QUADRATIC_COEF = 0.00030;
-  
+
   // 热力学侵蚀的线性基础增量：每回合火焰烘烤带来的固定材料剥离数值
   private final double THERMAL_LINEAR_BASE = 0.02;
-  
+
   // 沉降剪切力的线性基础增量：每回合物理重心偏移带来的固定应力增加
   private final double SHEAR_LINEAR_BASE = 0.015;
 
@@ -76,17 +76,17 @@ public class StructuralFatigueOracle {
     if (building == null) {
         return 0;
     }
-    
+
     // 提取出建筑的物理关键指标：将系统原生的 Brokenness (0-100) 逆向转换为结构血槽
     // 并将当前实时的温度 (Temperature) 视作正在施加的破坏流速
-    int currentIntegrity = (100 - building.getBrokenness()) * 10; 
+    int currentIntegrity = (100 - building.getBrokenness()) * 10;
     int currentThermalStress = building.getTemperature();
-    
+
     // 如果建筑已经彻底坍塌（完整度<=0），拦截冗余计算
     if (currentIntegrity <= 0) {
         return 0;
     }
-    
+
     // 委托给纯数字风洞推演中心进行沙盘推演
     return this.calcCollapseExpectancy(currentIntegrity, currentThermalStress);
   }
@@ -99,36 +99,36 @@ public class StructuralFatigueOracle {
     // 初始化沙盘体征：将整型的外部数据强制转换为双精度浮点数，以捕获微观层面的裂纹蔓延
     double simulatedIntegrity = initialIntegrity;
     double simulatedErosionRate = initialStress;
-    
+
     // 计时器归零：准备记录该建筑在推演中抵抗地心引力的循环次数
     int survivedCycles = 0;
-    
+
     // 开启坍塌倒计时：只要沙盘里这栋楼的主体结构还在，就让物理时间继续往前走
     while (simulatedIntegrity > 0) {
       // 冻结当前回合初的破坏流速，作为计算链式崩塌反应的基准参数
       final double baselineStress = simulatedErosionRate;
-      
+
       // 恶化叠加 1：热力学侵蚀发作，钢筋软化情况进一步恶化，破坏速率增加
       simulatedErosionRate += this.calcDamageThermal(baselineStress);
-      
+
       // 恶化叠加 2：剪切力撕裂发作，偏心荷载加剧，破坏速率再次增加
       simulatedErosionRate += this.calcDamageShear(baselineStress);
-      
+
       // 恶化叠加 3：外部化学灭火剂冷却收缩导致的脆性断裂（结构预留，当前版本不计入）
       simulatedErosionRate += this.calcDamageChemicalShock(baselineStress);
-      
+
       // 致命一击：在当前回合结束时，将叠加恶化后的总应力消耗，从建筑的承重血槽中扣除
       simulatedIntegrity -= simulatedErosionRate;
-      
+
       // 建筑又艰难地抵抗了一个回合的重力，计时器加一
       survivedCycles++;
-      
+
       // 绝对死锁保护：如果推演超出常规赛局总时间，强制熔断，说明该建筑永远不会塌
       if (survivedCycles > 500) {
           break;
       }
     }
-    
+
     // 推演结束（此时 simulatedIntegrity <= 0），返回它总共撑住的回合数
     return survivedCycles;
   }

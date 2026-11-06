@@ -182,8 +182,8 @@ public class MergeGroupings extends DynamicClustering {
             }
             // 类型安全的模式匹配校验完成。
 
-            return this.designatedAgent.equals(otherNode.assignee()) && 
-                   this.hierarchyDepth == otherNode.level() && 
+            return this.designatedAgent.equals(otherNode.assignee()) &&
+                   this.hierarchyDepth == otherNode.level() &&
                    this.entityGroup.equals(otherNode.members());
             // 对比三大核心属性，当且仅当完全一致时判定为等价。
         }
@@ -498,7 +498,7 @@ public class MergeGroupings extends DynamicClustering {
             if (explorationFrontier.isEmpty()) {
                 // 周期性探查前缘队列的存量状态，校验探索区域是否已全量穷尽。
 
-                break; 
+                break;
                 // 若队列枯竭，代表该空间属于不可突破之孤岛拓扑，强制中断当前循环。
             }
             // 队列枯竭探测校验逻辑结束。
@@ -583,7 +583,7 @@ public class MergeGroupings extends DynamicClustering {
         this.constructTopologicalGraph();
         // 执行二维几何碰撞与图论测试，摸排并构建全局区域间的空间拓扑邻接联通网络。
 
-        IntStream.range(0, this.globalClusterCapacity).forEach(i -> 
+        IntStream.range(0, this.globalClusterCapacity).forEach(i ->
             // 遍历全局基础聚类区块的有效索引序列，执行数据格式化转换输出作业。
             precomputeData.setIntegerList(this.buildStorageKey(ADJACENCY_CACHE_KEY, i), this.topologicalGraph.get(i))
             // 将各目标聚类索引独有的网格邻接列表序列化写入预计算数据对象中实现持久化落盘存储。

@@ -38,13 +38,13 @@ public class OperationLog extends AbstractModule {
 
     // 自我遇险标志位。如果我这个警察自己都被倒塌的房子压住了，我就什么也干不了了。
     private boolean isMyselfEntrappedState = false;
-    
+
     // 待挖掘平民名册。被埋在废墟里、急需消防队来挖的普通百姓。
     private Set<EntityID> buriedCivilianRoster = new HashSet<>();
-    
+
     // 待挖掘战友名册。被埋在废墟里的消防、警察、救护人员。战友的优先级永远高于平民。
     private Set<EntityID> buriedTeammateRoster = new HashSet<>();
-    
+
     // 待装载平民名册。没有被埋、但身上有伤在流血的平民。他们需要救护车来接，警察只负责记下位置。
     private Set<EntityID> bleedingCivilianRoster = new HashSet<>();
 
@@ -66,28 +66,28 @@ public class OperationLog extends AbstractModule {
          * 底层几何线段碰撞检测核芯。
          * 数学证明两条线段是否在空间中发生了十字交叉（或极其贴近）。
          */
-        private boolean detectSegmentCollision(double ray1X1, double ray1Y1, double ray1X2, double ray1Y2, 
+        private boolean detectSegmentCollision(double ray1X1, double ray1Y1, double ray1X2, double ray1Y2,
                                                double ray2X1, double ray2Y1, double ray2X2, double ray2Y2) {
-            
+
             // 组装射线 1：我的目光
             final java.awt.geom.Point2D.Double p1Start = new java.awt.geom.Point2D.Double(ray1X1, ray1Y1);
             final java.awt.geom.Point2D.Double p1End = new java.awt.geom.Point2D.Double(ray1X2, ray1Y2);
             final java.awt.geom.Line2D geometryRay1 = new java.awt.geom.Line2D.Double(p1Start, p1End);
-            
+
             // 组装射线 2：石头的物理边缘
             final java.awt.geom.Point2D.Double p2Start = new java.awt.geom.Point2D.Double(ray2X1, ray2Y1);
             final java.awt.geom.Point2D.Double p2End = new java.awt.geom.Point2D.Double(ray2X2, ray2Y2);
             final java.awt.geom.Line2D geometryRay2 = new java.awt.geom.Line2D.Double(p2Start, p2End);
-            
+
             // JDK 原生微积分交叉验证：看看真十字交叉了没？
             boolean isColliding = geometryRay1.intersectsLine(geometryRay2);
-            
+
             // 极限容差判定：即便没有严丝合缝地交叉，如果它们之间的距离小于 1 个像素点，依然视为擦肩而过的物理碰撞！
             isColliding |= geometryRay1.ptSegDist(p2Start) <= 1.0;
             isColliding |= geometryRay1.ptSegDist(p2End) <= 1.0;
             isColliding |= geometryRay2.ptSegDist(p1Start) <= 1.0;
             isColliding |= geometryRay2.ptSegDist(p1End) <= 1.0;
-            
+
             return isColliding;
         }
 
@@ -99,28 +99,28 @@ public class OperationLog extends AbstractModule {
             Set<EntityID> visuallyChangedEntities = worldInfo.getChanged().getChangedEntities();
             EntityID mySelfLocationId = agentInfo.getPosition();
             EntityID mySelfEntityId = agentInfo.getID();
-            
+
             int acousticRadius = scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
-            
+
             EntityID closestAmbulanceId = null;
             double shortestDistanceToMe = Double.MAX_VALUE;
 
             for (EntityID currentId : visuallyChangedEntities) {
                 // 防精神分裂：我不能自己喊我自己
                 if (currentId.equals(mySelfEntityId)) continue;
-                
+
                 StandardEntity rawEntity = worldInfo.getEntity(currentId);
                 if (rawEntity instanceof AmbulanceTeam) {
                     AmbulanceTeam atEntity = (AmbulanceTeam) rawEntity;
                     EntityID atLocationId = atEntity.getPosition();
-                    
+
                     // 战术前提：这辆救护车必须停在路面上，说明他现在手头没急活
                     if (worldInfo.getPosition(atEntity.getID()) instanceof Road) {
-                        
+
                         double distanceToMyBody = worldInfo.getDistance(atLocationId, mySelfEntityId);
                         // 在喇叭射程范围内
                         if (distanceToMyBody < acousticRadius) {
-                            
+
                             double distanceToMyLocation = worldInfo.getDistance(atLocationId, mySelfLocationId);
                             if (distanceToMyLocation < shortestDistanceToMe) {
                                 shortestDistanceToMe = distanceToMyLocation;
@@ -139,21 +139,21 @@ public class OperationLog extends AbstractModule {
          * 发射一条虚拟射线，如果射线和废墟的任何一条边缘交叉了，说明视线受阻。
          */
         boolean checkVisualIntersectionWithRubble(double myX, double myY, double targetX, double targetY, Blockade rubblePile) {
-            
+
             // 把这块石头的所有墙角提取出来，连成一圈封闭的几何线条网络
             List<Line2D> rubbleEdges = GeometryTools2D.pointsToLines(
                     GeometryTools2D.vertexArrayToPoints(rubblePile.getApexes()), true);
-                    
+
             // 遍历石头的每一条锋利的边
             for (Line2D rubbleEdge : rubbleEdges) {
                 Point2D edgeStart = rubbleEdge.getOrigin();
                 Point2D edgeEnd = rubbleEdge.getEndPoint();
-                
+
                 double edgeX1 = edgeStart.getX();
                 double edgeY1 = edgeStart.getY();
                 double edgeX2 = edgeEnd.getX();
                 double edgeY2 = edgeEnd.getY();
-                
+
                 // 启动底层微积分核芯：用我的目光射线，去狠狠地切这块石头的边。如果切上了，报警！
                 if (detectSegmentCollision(myX, myY, targetX, targetY, edgeX1, edgeY1, edgeX2, edgeY2)) {
                     System.out.println("视线受阻：发现碎石遮挡目标！ intersect!");
@@ -170,20 +170,20 @@ public class OperationLog extends AbstractModule {
             Set<EntityID> visuallyChangedEntities = worldInfo.getChanged().getChangedEntities();
             EntityID mySelfLocationId = agentInfo.getPosition();
             EntityID mySelfEntityId = agentInfo.getID();
-            
+
             int acousticRadius = scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
-            
+
             EntityID closestPoliceId = null;
             double shortestDistanceToMe = Double.MAX_VALUE;
 
             for (EntityID currentId : visuallyChangedEntities) {
                 if (currentId.equals(mySelfEntityId)) continue;
-                
+
                 StandardEntity rawEntity = worldInfo.getEntity(currentId);
                 if (rawEntity instanceof PoliceForce) {
                     PoliceForce pfEntity = (PoliceForce) rawEntity;
                     EntityID pfLocationId = pfEntity.getPosition();
-                    
+
                     if (worldInfo.getPosition(pfEntity.getID()) instanceof Road) {
                         double distanceToMyBody = worldInfo.getDistance(pfLocationId, mySelfEntityId);
                         if (distanceToMyBody < acousticRadius) {
@@ -207,26 +207,26 @@ public class OperationLog extends AbstractModule {
             Set<EntityID> visuallyChangedEntities = worldInfo.getChanged().getChangedEntities();
             EntityID mySelfLocationId = agentInfo.getPosition();
             EntityID mySelfEntityId = agentInfo.getID();
-            
+
             // 从底层配置文件读取我的大嗓门能喊多远（通常是 30 米）
             int acousticRadius = scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
-            
+
             EntityID closestFireTruckId = null;
             double shortestDistanceToMe = Double.MAX_VALUE;
 
             // 环顾四周看一看
             for (EntityID currentId : visuallyChangedEntities) {
                 StandardEntity rawEntity = worldInfo.getEntity(currentId);
-                
+
                 // 确保那是一辆消防车
                 if (rawEntity instanceof FireBrigade) {
                     FireBrigade fbEntity = (FireBrigade) rawEntity;
                     EntityID fbLocationId = fbEntity.getPosition();
-                    
+
                     // 第一重物理安检：他到底在不在我的大嗓门波及范围内？
                     double distanceToMyBody = worldInfo.getDistance(fbLocationId, mySelfEntityId);
                     if (distanceToMyBody < acousticRadius) {
-                        
+
                         // 第二重数学安检：用于打擂台比谁最近
                         double distanceToMyLocation = worldInfo.getDistance(fbLocationId, mySelfLocationId);
                         if (distanceToMyLocation < shortestDistanceToMe) {
@@ -250,10 +250,10 @@ public class OperationLog extends AbstractModule {
     @Override
     public AbstractModule calc() {
         final EntityID mySelfId = this.agentInfo.getID();
-        
+
         // 聘请首席战地军医
         MedicalTriage medic = new MedicalTriage();
-        
+
         // 第一重安检：伤情自检！看自己有没有被埋
         this.isMyselfEntrappedState = medic.evaluateIfNeedsDigging(mySelfId);
         // 如果被压在石头底下了，直接躺平，停止情报录入
@@ -263,7 +263,7 @@ public class OperationLog extends AbstractModule {
         Set<EntityID> visuallyChangedEntities = this.worldInfo.getChanged().getChangedEntities();
         // 兜底防呆：把自己也装进网兜，免得自己伤情恶化了没发现
         visuallyChangedEntities.add(mySelfId);
-        
+
         // 军医开始接客：把网兜里的人挨个拉出来检伤，并扔进不同的档案柜
         medic.performTriage(visuallyChangedEntities);
 
@@ -290,18 +290,18 @@ public class OperationLog extends AbstractModule {
                 StandardEntity rawEntity = worldInfo.getEntity(currentId);
                 // 警察的情报系统只关心人类死活，石头和火不管
                 if (!(rawEntity instanceof Human)) continue;
-                
+
                 StandardEntity safeHouseLocation = worldInfo.getPosition(currentId);
                 // 安全屋豁免：如果人已经待在避难所（医院）里，那是绝对安全的，跳过
                 if (safeHouseLocation.getStandardURN().equals(REFUGE)) continue;
-                
+
                 // 临床诊断：他需要被铁锹挖吗？他需要担架抬吗？
                 boolean requiresDigging = this.evaluateIfNeedsDigging(currentId);
                 boolean requiresLoading = this.evaluateIfNeedsLoading(currentId);
-                
+
                 StandardEntityURN entityProfession = rawEntity.getStandardURN();
                 EntityID physicalLocationId = safeHouseLocation.getID();
-                
+
                 // 按照衣服上的徽章（兵种），将其分拨到不同的档案柜
                 if (entityProfession.equals(AMBULANCE_TEAM)) {
                     if (requiresDigging) {
@@ -333,7 +333,7 @@ public class OperationLog extends AbstractModule {
                         Set<EntityID> squad = civLocationMap.getOrDefault(physicalLocationId, new HashSet<>());
                         squad.add(currentId);
                         civLocationMap.put(physicalLocationId, squad);
-                        
+
                         // 平民被埋，列入常规待挖平民名册
                         buriedCivilianRoster.add(currentId);
                     } else if (requiresLoading) {
@@ -353,7 +353,7 @@ public class OperationLog extends AbstractModule {
             final int currentHp = victimBody.getHP();
             final int rubbleDepth = victimBody.getBuriedness();
             // 只有当血量和深度都不为 0 时，乘积才不为 0
-            return (currentHp * rubbleDepth != 0); 
+            return (currentHp * rubbleDepth != 0);
         }
 
         /**
@@ -363,7 +363,7 @@ public class OperationLog extends AbstractModule {
         boolean evaluateIfNeedsLoading(EntityID suspectId) {
             final Human victimBody = (Human) worldInfo.getEntity(suspectId);
             if (victimBody == null) return false;
-            
+
             final int currentHp = victimBody.getHP();
             final int rubbleDepth = victimBody.getBuriedness();
             return (currentHp > 0 && rubbleDepth == 0);
@@ -378,25 +378,25 @@ public class OperationLog extends AbstractModule {
         EntityID determineHighestPriorityTask(Set<EntityID> candidateQueue) {
             EntityID optimalTargetId = null;
             double lowestCalculatedCost = Double.MAX_VALUE;
-            
+
             // 把名单里的人挨个拉出来算一算
             for (EntityID suspectId : candidateQueue) {
                 final Human victimBody = (Human) worldInfo.getEntity(suspectId);
                 final Pair<Integer, Integer> victimCoords = worldInfo.getLocation(suspectId);
-                
+
                 // 物理路费测算：我的位置到他的位置的曼哈顿距离开个根号
                 final double rawManhattanDistance = Math.abs(agentInfo.getX() - victimCoords.first())
                                                   + Math.abs(agentInfo.getY() - victimCoords.second());
                 final double geographicCost = Math.sqrt(rawManhattanDistance);
-                
+
                 // 医学寿命测算：调用底层长寿仪算一下他还能喘气多久
                 final SurvivalChronicle medicalAnalyzer = new SurvivalChronicle(victimBody);
                 // 活得越久，成本分越高，排名越靠后；快死了，成本分极低，立马拔得头筹！
                 final double medicalCost = medicalAnalyzer.getLifeXpectancy() * 1.0;
-                
+
                 // 综合打分：地理路费 + 阎王爷催命符
                 final double totalCost = geographicCost + medicalCost;
-                
+
                 // 打擂台，寻找代价最小（最紧急、最近）的任务
                 if (lowestCalculatedCost > totalCost) {
                     lowestCalculatedCost = totalCost;
@@ -418,7 +418,7 @@ public class OperationLog extends AbstractModule {
      */
     private EntityID recommendDispatchTask() {
         MedicalTriage medic = new MedicalTriage();
-        
+
         // 永远是战友兄弟优先！
         if (!this.buriedTeammateRoster.isEmpty()) {
             return medic.determineHighestPriorityTask(this.buriedTeammateRoster);

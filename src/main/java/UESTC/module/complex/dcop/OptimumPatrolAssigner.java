@@ -38,25 +38,25 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
    * 物理意义：警察指挥中心的 URN，用于推举全城清障行动的总指挥。
    */
   private final static StandardEntityURN HEADQUARTERS_URN = POLICE_OFFICE;
-  
+
   /**
    * 官方警察兵种实体标识。
    * 物理意义：一线作战警察的 URN，用于统计全城可用警力。
    */
   private final static StandardEntityURN OFFICER_URN = POLICE_FORCE;
-  
+
   /**
    * 算法协商最大迭代次数。
    * 物理意义：各名警察之间通过电报互发清障意向、讨价还价的轮数，保证数学模型收敛。
    */
   private final static int MAX_NEGOTIATION_ROUNDS = 100;
-  
+
   /**
    * 道路堵塞基础惩罚值。
    * 物理意义：如果一条道路被堵死且没人去管，系统默认承受 300.0 的交通瘫痪惩罚。
    */
   private final static double DEFAULT_BLOCK_PENALTY = 300.0;
-  
+
   /**
    * 虚拟闲逛任务。
    * 物理意义：当全城道路畅通时，赋予警察一个虚拟任务，防止算法因无事可做而崩溃。
@@ -68,19 +68,19 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
    * 物理意义：算法收敛后的最终决定，记录了具体的警察 ID（Key）被派往了哪条道路 ID（Value）去清障。
    */
   private final Map<EntityID, EntityID> finalAllocationMap = new HashMap<>();
-  
+
   /**
    * 全城警力作战序列。
    * 物理意义：记录所有可以参与本次统筹调度的警察身份证号。
    */
   private Set<EntityID> activeOfficers = new HashSet<>();
-  
+
   /**
    * 待清理道路清单。
    * 物理意义：记录所有存在碎石路障，需要派人去清理的道路 ID 集合。
    */
   private final Set<EntityID> clearingTargets = new HashSet<>();
-  
+
   /**
    * 畅通道路黑名单。
    * 物理意义：从汇报电报中得知已经清理干净的道路，从清障名单中剔除。
@@ -92,7 +92,7 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
    * 物理意义：承载着所有警察大脑（变量）和待清理道路（因子）的内存推演沙盘。
    */
   private final Map<EntityID, Factor<EntityID>> dcopNetworkNodes = new HashMap<>();
-  
+
   /**
    * 战地局域网通信基站。
    * 物理意义：用于在各个警察节点之间中转协商报价单。
@@ -104,7 +104,7 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
    * 物理意义：路越宽、面积越大，清理起来越费劲。这个表记录了全城每条路的面积占最大面积的百分比，用于计算惩罚系数。
    */
   private final Map<EntityID, Double> roadAreaRatios = new HashMap<>();
-  
+
   /**
    * 紧急求救清障名单。
    * 物理意义：如果有救护车或消防车发来急电说“我被堵住了，快来救我”，这些道路将被列入此最高优先级名单。
@@ -144,12 +144,12 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
   public OptimumPatrolAssigner calc() {
     // 销毁上一秒的过期派工单
     this.finalAllocationMap.clear();
-    
+
     // 如果作战序列空空如也，立即去系统花名册里把全城的警察抓取过来
     if (this.activeOfficers.isEmpty()) {
       this.initializeAgents();
     }
-    
+
     // 评估是否有必要进行全城大统筹
     boolean isAllocationNeeded = this.have2allocate();
     if (isAllocationNeeded == false) {
@@ -158,7 +158,7 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
 
     // 第一阶段：战情勘察。筛选全城需要清理的道路，并特别关照被紧急求救的区域。
     this.initializeTasks();
-    
+
     // 第二阶段：搭建推演沙盘。为警察和道路建立数学节点并连线。
     this.initializeFactorGraph();
 
@@ -174,7 +174,7 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     for (EntityID officerId : this.activeOfficers) {
       Factor<EntityID> brainNode = this.dcopNetworkNodes.get(officerId);
       EntityID chosenRoad = selectTask((ProxyFactor<EntityID>) brainNode);
-      
+
       if (chosenRoad.equals(IDLE_PATROL_TASK)) {
         chosenRoad = null;
       }
@@ -218,10 +218,10 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     for (CommunicationMessage rawMsg : pfMessages) {
         MessagePoliceForce pfMsg = (MessagePoliceForce) rawMsg;
         MessageUtil.reflectMessage(this.worldInfo, pfMsg);
-        
+
         EntityID senderId = pfMsg.getAgentID();
         Human officerBody = (Human) this.worldInfo.getEntity(senderId);
-        
+
         if (officerBody != null) {
             officerBody.undefineX();
             officerBody.undefineY();
@@ -234,7 +234,7 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     Collection<CommunicationMessage> pfCommands = mm.getReceivedMessageList(CommandPolice.class);
     for (CommunicationMessage rawMsg : pfCommands) {
       CommandPolice command = (CommandPolice) rawMsg;
-      
+
       // 必须是全网广播的紧急指令
       if (!command.isBroadcast()) {
         continue;
@@ -302,10 +302,10 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
   private void calculateRoadAreaRatios() {
     final Map<EntityID, Double> absoluteAreas = new HashMap<>();
     Collection<StandardEntity> roadEntities = this.worldInfo.getEntitiesOfType(ROAD, HYDRANT);
-    
+
     // 逐个丈量面积
     for (StandardEntity entity : roadEntities) {
-        Area mapArea = (Area) entity; 
+        Area mapArea = (Area) entity;
         absoluteAreas.put(mapArea.getID(), computeArea(mapArea));
     }
 
@@ -345,14 +345,14 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     if (isNetworkComplete == false) {
       return false;
     }
-    
+
     int onlineCount = this.acknowledgedOfficers.size();
     int rosterCount = this.activeOfficers.size();
     if (onlineCount != rosterCount) {
       return false;
     }
 
-    int minimumCenterValue = Integer.MAX_VALUE; 
+    int minimumCenterValue = Integer.MAX_VALUE;
     Collection<EntityID> centerIds = this.worldInfo.getEntityIDsOfType(HEADQUARTERS_URN);
     for (EntityID currentId : centerIds) {
         int idNumericValue = currentId.getValue();
@@ -364,10 +364,10 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     final int mySelfId = this.agentInfo.getID().getValue();
     final int currentTimestep = this.agentInfo.getTime();
     final int ignoreThresholdTimestep = this.scenarioInfo.getKernelAgentsIgnoreuntil();
-    
+
     boolean isReady = (currentTimestep >= ignoreThresholdTimestep);
     boolean isTheCommander = (mySelfId == minimumCenterValue);
-    
+
     return isReady && isTheCommander;
   }
 
@@ -400,7 +400,7 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     List<EntityID> feetUnderTasks = new ArrayList<>();
 
     for (StandardEntity baseEntity : allPoliceEntities) {
-        Human policeOfficer = (Human) baseEntity;  
+        Human policeOfficer = (Human) baseEntity;
         // 如果该警察确切知道自己在哪
         if (policeOfficer.isPositionDefined()) {
             EntityID currentPosition = policeOfficer.getPosition();
@@ -415,7 +415,7 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     // 汇总：将脚底下的路、和别人求救的路，统一列为全城的待清理沙盘目标
     this.clearingTargets.addAll(feetUnderTasks);
     this.clearingTargets.addAll(this.emergencyRequestedRoads);
-    
+
     // 划掉已经清理完的通途
     this.clearingTargets.removeAll(this.clearedRoads);
   }
@@ -428,17 +428,17 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
    */
   private List<EntityID> extractTasks(EntityID currentPosition) {
     StandardEntity locationEntity = this.worldInfo.getEntity(currentPosition);
-    
+
     // 如果这个人站的地方连个能站脚的面积都没有，无法分析
     if (!(locationEntity instanceof Area)) {
       return null;
     }
-    
+
     // 如果他站的地方不是马路（说明在房子里），或者他脚下这条马路已经清理干净了（在黑名单里）
     if (!(locationEntity instanceof Road) || this.clearedRoads.contains(currentPosition)) {
       Area buildingArea = (Area) locationEntity;
       List<EntityID> adjacentRoads = new ArrayList<>();
-      
+
       // 遍历这栋房子的四周，寻找连通的马路
       for (EntityID neighborId : buildingArea.getNeighbours()) {
           StandardEntity neighborEntity = this.worldInfo.getEntity(neighborId);
@@ -455,7 +455,7 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     directRoad.add(currentPosition);
     return directRoad;
   }
-  
+
   /**
    * DCOP 神经沙盘铺设车间。
    */
@@ -472,11 +472,11 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
     for (EntityID currentOfficerId : officerIds) {
         Factor<EntityID> innerSelector = new ChoiceHeuristic<>();
         WeightingFactor<EntityID> brainNode = new WeightingFactor<>(innerSelector);
-        
+
         brainNode.setMaxOperator(new Minimize());
         brainNode.setIdentity(currentOfficerId);
         brainNode.setCommunicationAdapter(this.radioStation);
-        
+
         this.dcopNetworkNodes.put(currentOfficerId, brainNode);
     }
   }
@@ -487,19 +487,19 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
   private void initializeFactorNodes(Collection<EntityID> roadIds) {
     for (EntityID currentRoadId : roadIds) {
       CardinalityFactor<EntityID> roadNode = new SetSizeMultiplier<>();
-      
+
       CardinalityFunction dynamicBlockFunc = new CardinalityFunction() {
           @Override
           public double getCost(int activeOfficerCount) {
               return computePenalty(currentRoadId, activeOfficerCount);
           }
       };
-      
+
       roadNode.setFunction(dynamicBlockFunc);
       roadNode.setMaxOperator(new Minimize());
       roadNode.setIdentity(currentRoadId);
       roadNode.setCommunicationAdapter(this.radioStation);
-      
+
       this.dcopNetworkNodes.put(currentRoadId, roadNode);
     }
   }
@@ -510,14 +510,14 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
    */
   private void connectNodes(Collection<EntityID> variableNodeIds, Collection<EntityID> factorNodeIds) {
     for (EntityID vNodeId : variableNodeIds) {
-      
+
       List<EntityID> sortedRoads = new ArrayList<>(factorNodeIds);
       Collections.sort(sortedRoads, new Comparator<EntityID>() {
           @Override
           public int compare(EntityID road1, EntityID road2) {
               if (road1.equals(IDLE_PATROL_TASK)) return -1;
               if (road2.equals(IDLE_PATROL_TASK)) return 1;
-              
+
               double dist1 = worldInfo.getDistance(road1, vNodeId);
               double dist2 = worldInfo.getDistance(road2, vNodeId);
               return Double.compare(dist1, dist2);
@@ -527,10 +527,10 @@ public class OptimumPatrolAssigner extends PoliceTargetAllocator {
       for (EntityID fNodeId : sortedRoads) {
         WeightingFactor<EntityID> vNode = (WeightingFactor<EntityID>) this.dcopNetworkNodes.get(vNodeId);
         Factor<EntityID> fNode = (Factor<EntityID>) this.dcopNetworkNodes.get(fNodeId);
-        
+
         vNode.addNeighbor(fNodeId);
         fNode.addNeighbor(vNodeId);
-        
+
         double distancePenalty = this.computePenalty(vNodeId, fNodeId);
         vNode.setPotential(fNodeId, distancePenalty);
       }

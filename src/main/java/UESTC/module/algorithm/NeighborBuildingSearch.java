@@ -27,26 +27,26 @@ public class NeighborBuildingSearch extends StaticClustering {
     @Override
     public int getClusterNumber() {
         // 直接返回映射表中记录的独立聚类总数
-        return this.buildingNeighborsMap.size(); 
+        return this.buildingNeighborsMap.size();
     }
 
     @Override
     public int getClusterIndex(StandardEntity entity) {
         // 将实体对象转化为实体 ID，委托给另一个重载方法处理
-        return this.getClusterIndex(entity.getID()); 
+        return this.getClusterIndex(entity.getID());
     }
 
     @Override
     public int getClusterIndex(EntityID id) {
         // 在本模块中，建筑 ID 的内部整型值直接充当其聚类索引
-        return id.getValue(); 
+        return id.getValue();
     }
 
     @Override
     public Collection<StandardEntity> getClusterEntities(int clusterIdx) {
         // 先调用内部方法，获取当前索引名下的所有相邻建筑 ID
         Collection<EntityID> groupMembers = this.getClusterEntityIDs(clusterIdx);
-        
+
         // 增加空值拦截，防止后续 Stream 操作触发空指针异常
         if (groupMembers == null || groupMembers.isEmpty()) {
             // 如果没找到邻居，返回一个不可变的空集合
@@ -60,7 +60,7 @@ public class NeighborBuildingSearch extends StaticClustering {
                 // 剔除映射失败的 null 值，保证返回集合的纯净度
                 .filter(Objects::nonNull)
                 // 收集过滤后的流数据，打包为 List 返回
-                .toList(); 
+                .toList();
     }
 
     @Override
@@ -147,7 +147,7 @@ public class NeighborBuildingSearch extends StaticClustering {
     private Set<EntityID> fetchBuildingsInVicinity(EntityID centerBuildingId, Set<EntityID> allBuildingIdentifiers) {
         // 提取中心建筑在二维平面上的绝对包围盒
         Rectangle boundingBox = this.extractBoundingBox(centerBuildingId);
-        
+
         // 提取矩形宽高的最大值，乘以扩散系数，作为范围搜索的阈值半径
         int radiusLimit = (int) (Math.max(boundingBox.getWidth(), boundingBox.getHeight()) * PROXIMITY_MULTIPLIER);
 
